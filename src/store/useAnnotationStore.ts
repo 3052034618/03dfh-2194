@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { Annotation, AnnotationTag, AnnotationRegion, UserRole, MeetingFocus } from '../types';
 import { generateMockPages, buildMockAnnotationMap } from '../data/mockData';
 import { generateId } from '../utils/idGenerator';
+import { usePageStore } from './usePageStore';
 
 const STORAGE_KEY = 'mangaflow_annotations';
 const MEETING_STORAGE_KEY = 'mangaflow_meeting';
@@ -33,6 +34,7 @@ interface AnnotationState {
   setSelectedAnnotation: (id: string | null) => void;
   startMeeting: (focus: Omit<MeetingFocus, 'startedAt'>) => void;
   updateMeetingFocus: (updates: Partial<MeetingFocus>) => void;
+  syncStatusFilterToMeeting: (statusFilter: MeetingFocus['statusFilter']) => void;
   endMeeting: () => void;
 }
 
@@ -168,6 +170,10 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
       tagFilter: focus.tagFilter,
       selectedAnnotationId: focus.selectedAnnotationId,
     });
+    const pageStore = usePageStore.getState();
+    if (pageStore.statusFilter !== focus.statusFilter) {
+      pageStore.setStatusFilter(focus.statusFilter);
+    }
     saveMeetingToStorage(meeting);
   },
 
@@ -176,8 +182,21 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
       if (!state.meetingFocus) return state;
       const next = { ...state.meetingFocus, ...updates };
       saveMeetingToStorage(next);
+      if (updates.statusFilter) {
+        const pageStore = usePageStore.getState();
+        if (pageStore.statusFilter !== updates.statusFilter) {
+          pageStore.setStatusFilter(updates.statusFilter);
+        }
+      }
       return { meetingFocus: next };
     });
+  },
+
+  syncStatusFilterToMeeting: (statusFilter) => {
+    const meeting = get().meetingFocus;
+    if (meeting && meeting.statusFilter !== statusFilter) {
+      get().updateMeetingFocus({ statusFilter });
+    }
   },
 
   endMeeting: () => {

@@ -30,10 +30,11 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ pageId, imag
   const rawAnns = useAnnotationStore((s) => s.annotations[pageId]);
   const annotations = useMemo(() => rawAnns || [], [rawAnns]);
   const focusAnnId = meetingFocus?.selectedAnnotationId;
+  const selectedAnnId = useAnnotationStore((s) => s.selectedAnnotationId);
   const addAnnotation = useAnnotationStore((s) => s.addAnnotation);
   const deleteAnnotation = useAnnotationStore((s) => s.deleteAnnotation);
   const resolveAnnotation = useAnnotationStore((s) => s.resolveAnnotation);
-  const [selectedAnn, setSelectedAnn] = useState<string | null>(null);
+  const setSelectedAnn = useAnnotationStore((s) => s.setSelectedAnnotation);
   const [showForm, setShowForm] = useState(false);
   const [pendingRegion, setPendingRegion] = useState<AnnotationRegion | null>(null);
   const [formTag, setFormTag] = useState<AnnotationTag>('unclear_composition');
@@ -321,12 +322,12 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ pageId, imag
                 className="pointer-events-auto cursor-pointer"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setSelectedAnn(a.id);
+                  setSelectedAnn(selectedAnnId === a.id ? null : a.id);
                 }}
               >
                 {renderRegion(
                   a.region,
-                  a.id === focusAnnId ? '#ef4444' : selectedAnn === a.id ? '#fff' : TAG_COLORS[a.tag].stroke,
+                  a.id === focusAnnId ? '#ef4444' : selectedAnnId === a.id ? '#fff' : TAG_COLORS[a.tag].stroke,
                   a.id,
                   <g>
                     <foreignObject
@@ -435,17 +436,19 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ pageId, imag
           ) : (
             <div className="space-y-2">
               {annotations.map((a, i) => {
-                const active = selectedAnn === a.id;
+                const active = selectedAnnId === a.id;
                 return (
                   <div
                     key={a.id}
-                    onClick={() => setSelectedAnn(a.id)}
+                    onClick={() => setSelectedAnn(selectedAnnId === a.id ? null : a.id)}
                     className={cn(
                       'rounded-lg p-3 border transition-all cursor-pointer',
                       active
                         ? 'border-accent-400/60 bg-accent-400/5 shadow-[0_0_15px_rgba(217,119,87,0.15)]'
                         : 'border-ink-700/60 bg-ink-900/40 hover:border-ink-600/70 hover:bg-ink-800/50',
                       a.resolved && 'opacity-70',
+                      a.id === focusAnnId &&
+                        'border-danger/60 bg-danger/10 shadow-[0_0_20px_rgba(239,68,68,0.25)]',
                     )}
                   >
                     <div className="flex items-start justify-between gap-2 mb-1.5">
@@ -483,7 +486,7 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ pageId, imag
                           onClick={(e) => {
                             e.stopPropagation();
                             deleteAnnotation(a.id);
-                            if (selectedAnn === a.id) setSelectedAnn(null);
+                            if (selectedAnnId === a.id) setSelectedAnn(null);
                           }}
                           className="p-1 rounded text-ink-300 hover:bg-danger/20 hover:text-danger transition-all"
                           title="删除批注"

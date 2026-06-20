@@ -1,10 +1,13 @@
-import React from 'react';
-import { BookOpen, LayoutGrid, ListTodo, ClipboardList, Filter, Users, Video, VideoOff, Radio } from 'lucide-react';
-import type { Work, Chapter, PageReviewStatus, UserRole, MeetingFocus } from '../../types';
+import React, { useState, useMemo } from 'react';
+import { BookOpen, LayoutGrid, ListTodo, ClipboardList, Filter, Users, Video, VideoOff, Radio, FileText, X, Download } from 'lucide-react';
+import type { Work, Chapter, PageReviewStatus, UserRole, MeetingFocus, MeetingPageConclusion } from '../../types';
 import { STATUS_FLAGS } from '../../utils/tagConfig';
 import { cn } from '../../utils/idGenerator';
 import { ROLE_LABELS, ROLE_COLORS } from '../../utils/tagConfig';
 import { useAuthStore } from '../../store/useAuthStore';
+import { useConclusionStore } from '../../store/useConclusionStore';
+import { useAnnotationStore } from '../../store/useAnnotationStore';
+import { usePageStore } from '../../store/usePageStore';
 
 interface TopNavbarProps {
   work: Work | undefined;
@@ -44,6 +47,16 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
   onJumpToMeetingFocus,
 }) => {
   const users = useAuthStore((s) => s.allUsers);
+  const addMeetingMinutes = useConclusionStore((s) => s.addMeetingMinutes);
+  const annotations = useAnnotationStore((s) => s.annotations);
+  const pages = usePageStore((s) => s.pages);
+  const conclusions = useConclusionStore((s) => (chapter ? s.conclusions[chapter.id] : []) || []);
+  const getMinutesForChapter = useConclusionStore((s) => s.getMinutesForChapter);
+  const allMinutes = useMemo(() => (chapter ? getMinutesForChapter(chapter.id) : []), [chapter, getMinutesForChapter]);
+  const [showMinutesModal, setShowMinutesModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [lastMinutes, setLastMinutes] = useState<any>(null);
+
   const filters: { v: PageReviewStatus | 'all'; label: string; key: keyof typeof stats | 'all' }[] = [
     { v: 'all', label: '全部', key: 'all' },
     { v: 'pending', label: '待审', key: 'pending' },
@@ -51,11 +64,73 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
     { v: 'approved', label: '通过', key: 'approved' },
   ];
 
+  const handleEndMeetingWithMinutes = () => {
+    if (!chapter) return;
+    const chapterPages = pages[chapter.id] || [];
+    const now = new Date().toISOString();
+    const pageConclusions: MeetingPageConclusion[] = chapterPages.map((page) => {
+      const pageAnnotations = annotations[page.id] || [];
+      const pageConclusion = conclusions.find((c) => c.pageId === page.id);
+      return {
+        pageId: page.id,
+        pageNumber: page.pageNumber,
+        finalOpinion: pageConclusion?.finalOpinion || '',
+        assigneeUserId: pageConclusion?.assigneeUserId || null,
+        annotationCount: pageAnnotations.length,
+        unresolvedCount: pageAnnotations.filter((a) => !a.resolved).length,
+        resolvedAt: pageConclusion?.resolvedAt || null,
+      };
+    });
+    const minutes = addMeetingMinutes({
+      chapterId: chapter.id,
+      startedAt: meetingFocus?.startedAt || now,
+      endedAt: now,
+      startedBy: meetingFocus?.startedBy || users[0]?.id || '',
+      totalPages: chapterPages.length,
+      pagesWithConclusions: pageConclusions.filter((pc) => pc.finalOpinion).length,
+      pageConclusions,
+    });
+    setLastMinutes(minutes);
+    setShowMinutesModal(true);
+    onEndMeeting();
+  };
+
+  const downloadMinutesMarkdown = (minutes: any) => {
+    if (!chapter) return;
+    let md = `# 《${work?.title}》${chapter.title} - 会审纪要\n\n`;
+    md += `**会议时间**：${new Date(minutes.startedAt).toLocaleString()} - ${new Date(minutes.endedAt).toLocaleString()}\n\n`;
+    md += `**主持人**：${users.find((u) => u.id === minutes.startedBy)?.name || '未记录'}\n\n`;
+    md += `**纪要摘要**：共 ${minutes.totalPages} 页，${minutes.pagesWithConclusions} 页有结论\n\n`;
+    md += `---\n\n`;
+    minutes.pageConclusions.forEach((pc: any) => {
+      md += `## 第 ${pc.pageNumber} 页\n\n`;
+      md += `- 批注：${pc.unresolvedCount}/${pc.annotationCount} 待改\n`;
+      if (pc.assigneeUserId) {
+        md += `- 负责人：${users.find((u) => u.id === pc.assigneeUserId)?.name || '未指定'}\n`;
+      }
+      if (pc.finalOpinion) {
+        md += `\n**处理意见**：\n\n${pc.finalOpinion}\n`;
+      }
+      if (pc.resolvedAt) {
+        md += `\n✓ 已于 ${new Date(pc.resolvedAt).toLocaleString()} 确认完成\n`;
+      }
+      md += `\n---\n\n`;
+    });
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `会审纪要_${chapter.title}_${new Date(minutes.endedAt).toISOString().slice(0, 10)}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const progressPct = stats.total > 0 ? ((stats.approved + stats.needs_revision) / stats.total) * 100 : 0;
   const meetingUser = meetingFocus ? users.find((u) => u.id === meetingFocus.startedBy) : null;
 
   return (
-    <header className="flex-shrink-0 h-16 border-b border-ink-700/60 bg-ink-800/90 backdrop-blur-md flex items-center px-5 gap-5">
+    <>
+      <header className="flex-shrink-0 h-16 border-b border-ink-700/60 bg-ink-800/90 backdrop-blur-md flex items-center px-5 gap-5">
       {/* Logo & 作品 */}
       <button
         onClick={onGoDashboard}
@@ -217,7 +292,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
 
       {/* 会议控制 */}
       {meetingFocus ? (
-        <button onClick={onEndMeeting} className="btn-secondary flex items-center gap-2 text-sm py-1.5 border-danger/40 text-danger hover:bg-danger/10">
+        <button onClick={handleEndMeetingWithMinutes} className="btn-secondary flex items-center gap-2 text-sm py-1.5 border-danger/40 text-danger hover:bg-danger/10">
           <VideoOff className="w-4 h-4" />
           结束会议
         </button>
@@ -228,11 +303,134 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
         </button>
       )}
 
+      {/* 历史纪要 */}
+      {allMinutes.length > 0 && (
+        <button onClick={() => setShowHistoryModal(true)} className="btn-secondary flex items-center gap-2 text-sm py-1.5 border-ink-600/60 text-ink-200 hover:bg-ink-700/50">
+          <FileText className="w-4 h-4" />
+          纪要（{allMinutes.length}）
+        </button>
+      )}
+
       {/* 生成修改清单 */}
       <button onClick={onGenerateChecklist} className="btn-primary flex items-center gap-2 text-sm py-1.5">
         <ClipboardList className="w-4 h-4" />
         生成修改清单
       </button>
     </header>
+
+    {/* 会议纪要弹窗 */}
+    {showMinutesModal && lastMinutes && (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div className="bg-ink-900 border border-ink-700/60 rounded-2xl shadow-2xl w-[700px] max-h-[85vh] flex flex-col overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-ink-700/60">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-accent-400/20 flex items-center justify-center">
+                <FileText className="w-5 h-5 text-accent-400" />
+              </div>
+              <div>
+                <div className="text-lg font-semibold text-ink-100">会议纪要已生成</div>
+                <div className="text-xs text-ink-400">共 {lastMinutes.totalPages} 页，{lastMinutes.pagesWithConclusions} 页有结论</div>
+              </div>
+            </div>
+            <button onClick={() => setShowMinutesModal(false)} className="p-1.5 rounded-lg hover:bg-ink-800/50 text-ink-400 hover:text-ink-200">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-auto p-6">
+            <div className="space-y-4">
+              {lastMinutes.pageConclusions.map((pc: any) => (
+                <div key={pc.pageId} className="bg-ink-800/40 border border-ink-700/60 rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="chip bg-ink-700/60 text-ink-100 font-mono">第 {pc.pageNumber} 页</span>
+                      <span className="text-xs text-ink-400">{pc.unresolvedCount}/{pc.annotationCount} 待改</span>
+                    </div>
+                    {pc.assigneeUserId && (
+                      <span className="text-xs text-accent-400">
+                        负责人：{users.find((u) => u.id === pc.assigneeUserId)?.name}
+                      </span>
+                    )}
+                  </div>
+                  {pc.finalOpinion ? (
+                    <div className="text-sm text-ink-200 leading-relaxed whitespace-pre-wrap">
+                      {pc.finalOpinion}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-ink-500 italic">未记录结论</div>
+                  )}
+                  {pc.resolvedAt && (
+                    <div className="mt-2 text-xs text-success">
+                      ✓ 已于 {new Date(pc.resolvedAt).toLocaleString()} 确认完成
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-ink-700/60 bg-ink-800/30">
+            <button
+              onClick={() => downloadMinutesMarkdown(lastMinutes)}
+              className="btn-secondary flex items-center gap-2 text-sm py-2"
+            >
+              <Download className="w-4 h-4" />
+              导出 Markdown
+            </button>
+            <button onClick={() => setShowMinutesModal(false)} className="btn-primary text-sm py-2">
+              完成
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* 历史纪要弹窗 */}
+    {showHistoryModal && (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div className="bg-ink-900 border border-ink-700/60 rounded-2xl shadow-2xl w-[700px] max-h-[85vh] flex flex-col overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-ink-700/60">
+            <div>
+              <div className="text-lg font-semibold text-ink-100">历史会议纪要</div>
+              <div className="text-xs text-ink-400">共 {allMinutes.length} 次会议</div>
+            </div>
+            <button onClick={() => setShowHistoryModal(false)} className="p-1.5 rounded-lg hover:bg-ink-800/50 text-ink-400 hover:text-ink-200">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-auto p-6">
+            {allMinutes.length === 0 ? (
+              <div className="text-center py-12 text-ink-400">暂无历史会议纪要</div>
+            ) : (
+              <div className="space-y-3">
+                {allMinutes.slice().reverse().map((m: any) => (
+                  <div key={m.id} className="bg-ink-800/40 border border-ink-700/60 rounded-xl p-4 hover:bg-ink-800/60 transition-colors">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-accent-400" />
+                        <span className="text-sm text-ink-100 font-medium">
+                          {new Date(m.startedAt).toLocaleDateString()} 会议纪要
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => downloadMinutesMarkdown(m)}
+                        className="text-xs text-accent-400 hover:text-accent-300 flex items-center gap-1"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        导出
+                      </button>
+                    </div>
+                    <div className="text-xs text-ink-400 space-y-1">
+                      <div>主持人：{users.find((u) => u.id === m.startedBy)?.name || '未记录'}</div>
+                      <div>时间：{new Date(m.startedAt).toLocaleString()} - {new Date(m.endedAt).toLocaleString()}</div>
+                      <div>进度：{m.pagesWithConclusions}/{m.totalPages} 页有结论</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 };

@@ -7,6 +7,7 @@ import { SpecialMarkStamp, StatusFlag, PageCountBadge } from '../common/Badges';
 import { GripVertical, MessageSquare, Bookmark, Check, AlertCircle, Eye, MoreHorizontal, Radio } from 'lucide-react';
 import { STATUS_FLAGS } from '../../utils/tagConfig';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
+import { useConclusionStore, selectProcessStatus, PROCESS_STATUS_LABELS, PROCESS_STATUS_COLORS } from '../../store/useConclusionStore';
 
 interface StoryPageCardProps {
   page: StoryPage;
@@ -37,6 +38,16 @@ export const StoryPageCard: React.FC<StoryPageCardProps> = ({
   };
   const rawAnns = useAnnotationStore((s) => s.annotations[page.id]);
   const anns = useMemo(() => rawAnns || [], [rawAnns]);
+  const rawConclusion = useConclusionStore((s) => s.conclusions[page.chapterId]);
+  const conclusion = useMemo(
+    () => rawConclusion?.find((c) => c.pageId === page.id),
+    [rawConclusion, page.id],
+  );
+  const processStatus = useMemo(
+    () => selectProcessStatus(page.id, anns),
+    [page.id, anns],
+  );
+  const processColor = PROCESS_STATUS_COLORS[processStatus];
   const [menuOpen, setMenuOpen] = useState(false);
 
   const flagCfg = STATUS_FLAGS[page.reviewStatus];
@@ -193,6 +204,10 @@ export const StoryPageCard: React.FC<StoryPageCardProps> = ({
         <div className="absolute bottom-0 left-0 right-0 px-3 py-2.5 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <PageCountBadge n={page.pageNumber} />
+            <span className={cn('chip border text-[9px]', processColor.bg, processColor.text, processColor.border)}>
+              <span className={cn('w-1.5 h-1.5 rounded-full', processColor.dot)} />
+              {PROCESS_STATUS_LABELS[processStatus]}
+            </span>
             <div className="flex -space-x-1">
               {anns.slice(0, 3).map((a, i) => {
                 const color =

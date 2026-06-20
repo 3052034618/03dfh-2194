@@ -50,9 +50,17 @@ const ReviewBoardPage: React.FC = () => {
   const startMeeting = useAnnotationStore((s) => s.startMeeting);
   const updateMeetingFocus = useAnnotationStore((s) => s.updateMeetingFocus);
   const endMeeting = useAnnotationStore((s) => s.endMeeting);
+  const syncStatusFilterToMeeting = useAnnotationStore((s) => s.syncStatusFilterToMeeting);
   const setRoleFilter = useAnnotationStore((s) => s.setRoleFilter);
   const setTagFilter = useAnnotationStore((s) => s.setTagFilter);
   const setSelectedAnn = useAnnotationStore((s) => s.setSelectedAnnotation);
+
+  // 状态筛选变化时同步到会议焦点
+  useEffect(() => {
+    if (meetingFocus) {
+      syncStatusFilterToMeeting(statusFilter);
+    }
+  }, [statusFilter, meetingFocus, syncStatusFilterToMeeting]);
 
   const currentUser = useAuthStore((s) => s.currentUser);
   const [viewMode, setViewMode] = useState<'grid' | 'status'>('grid');
@@ -78,6 +86,7 @@ const ReviewBoardPage: React.FC = () => {
   useEffect(() => {
     if (meetingFocus && meetingFocus.chapterId === chapterId && !initialSyncDone.current) {
       initialSyncDone.current = true;
+      if (meetingFocus.statusFilter !== statusFilter) setFilter(meetingFocus.statusFilter);
       if (meetingFocus.roleFilter !== roleFilter) setRoleFilter(meetingFocus.roleFilter);
       if (meetingFocus.tagFilter !== tagFilter) setTagFilter(meetingFocus.tagFilter);
       if (meetingFocus.pageId) {
@@ -156,12 +165,13 @@ const ReviewBoardPage: React.FC = () => {
     startMeeting({
       chapterId,
       pageId: selectedId,
+      statusFilter,
       roleFilter,
       tagFilter,
       selectedAnnotationId: selectedAnnId,
       startedBy: currentUser.id,
     });
-  }, [chapterId, currentUser, selectedId, roleFilter, tagFilter, selectedAnnId, startMeeting]);
+  }, [chapterId, currentUser, selectedId, statusFilter, roleFilter, tagFilter, selectedAnnId, startMeeting]);
 
   const handleEndMeeting = useCallback(() => {
     endMeeting();
@@ -170,6 +180,7 @@ const ReviewBoardPage: React.FC = () => {
 
   const handleJumpToMeetingFocus = useCallback(() => {
     if (!meetingFocus) return;
+    if (meetingFocus.statusFilter !== statusFilter) setFilter(meetingFocus.statusFilter);
     if (meetingFocus.pageId) {
       const target = allPages.find((p) => p.id === meetingFocus.pageId);
       if (target) {
@@ -181,7 +192,7 @@ const ReviewBoardPage: React.FC = () => {
         }
       }
     }
-  }, [meetingFocus, allPages, setSelected, roleFilter, setRoleFilter, tagFilter, setTagFilter, setSelectedAnn]);
+  }, [meetingFocus, allPages, setSelected, statusFilter, setFilter, roleFilter, setRoleFilter, tagFilter, setTagFilter, setSelectedAnn]);
 
   const totalStats = useMemo(() => ({ ...stats, total: allPages.length }), [stats, allPages.length]);
 

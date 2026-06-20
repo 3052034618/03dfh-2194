@@ -86,9 +86,44 @@ export interface Annotation {
   resolved: boolean;
 }
 
+export type PageProcessStatus = 'pending_review' | 'needs_revision' | 'partially_resolved' | 'fully_resolved';
+
+export interface PageConclusion {
+  id: string;
+  pageId: string;
+  chapterId: string;
+  finalOpinion: string;
+  assigneeUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  resolvedAt: string | null;
+}
+
+export interface MeetingPageConclusion {
+  pageId: string;
+  pageNumber: number;
+  finalOpinion: string;
+  assigneeUserId: string | null;
+  annotationCount: number;
+  unresolvedCount: number;
+  resolvedAt: string | null;
+}
+
+export interface MeetingMinutes {
+  id: string;
+  chapterId: string;
+  startedBy: string;
+  startedAt: string;
+  endedAt: string;
+  totalPages: number;
+  pagesWithConclusions: number;
+  pageConclusions: MeetingPageConclusion[];
+}
+
 export interface MeetingFocus {
   chapterId: string;
   pageId: string | null;
+  statusFilter: PageReviewStatus | 'all';
   roleFilter: UserRole | 'all';
   tagFilter: AnnotationTag | 'all';
   selectedAnnotationId: string | null;
