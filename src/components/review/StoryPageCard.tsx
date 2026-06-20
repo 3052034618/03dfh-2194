@@ -1,16 +1,17 @@
 import React, { useState, useMemo } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { StoryPage, SpecialMark } from '../../types';
+import type { StoryPage, SpecialMark, MeetingFocus } from '../../types';
 import { cn } from '../../utils/idGenerator';
 import { SpecialMarkStamp, StatusFlag, PageCountBadge } from '../common/Badges';
-import { GripVertical, MessageSquare, Bookmark, Check, AlertCircle, Eye, MoreHorizontal } from 'lucide-react';
+import { GripVertical, MessageSquare, Bookmark, Check, AlertCircle, Eye, MoreHorizontal, Radio } from 'lucide-react';
 import { STATUS_FLAGS } from '../../utils/tagConfig';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
 
 interface StoryPageCardProps {
   page: StoryPage;
   selected: boolean;
+  meetingFocus: MeetingFocus | null;
   onClick: () => void;
   onOpenAnnotation: () => void;
   onToggleMark: (mark: SpecialMark) => void;
@@ -20,6 +21,7 @@ interface StoryPageCardProps {
 export const StoryPageCard: React.FC<StoryPageCardProps> = ({
   page,
   selected,
+  meetingFocus,
   onClick,
   onOpenAnnotation,
   onToggleMark,
@@ -39,6 +41,7 @@ export const StoryPageCard: React.FC<StoryPageCardProps> = ({
 
   const flagCfg = STATUS_FLAGS[page.reviewStatus];
   const isMemory = page.specialMarks.includes('recollection');
+  const isMeetingFocus = meetingFocus?.pageId === page.id;
 
   const markOptions: { v: SpecialMark; label: string }[] = [
     { v: 'cover', label: '封面' },
@@ -55,9 +58,17 @@ export const StoryPageCard: React.FC<StoryPageCardProps> = ({
       className={cn(
         'group relative cursor-pointer animate-fade-in-up',
         selected && 'page-selected rounded-sm',
+        isMeetingFocus && 'ring-2 ring-danger shadow-[0_0_20px_rgba(239,68,68,0.3)] rounded-sm',
       )}
       onClick={onClick}
     >
+      {/* 会议焦点标识 */}
+      {isMeetingFocus && (
+        <div className="absolute -top-2 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1 px-2 py-0.5 rounded-full bg-danger text-ink-50 text-[9px] font-bold shadow-md animate-breathe">
+          <Radio className="w-2.5 h-2.5 animate-pulse" />
+          会议焦点
+        </div>
+      )}
       {/* 状态旗标 */}
       <div
         className={cn(

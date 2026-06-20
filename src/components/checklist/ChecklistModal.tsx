@@ -26,7 +26,7 @@ export const ChecklistModal: React.FC<ChecklistModalProps> = ({ open, onClose, p
   );
 
   const items: ChecklistItem[] = useMemo(
-    () => generateChecklist(pages.map((p) => p.id), pageInfos),
+    () => generateChecklist(pages.map((p) => p.id), pageInfos, rawAnnotations),
     [rawAnnotations, pages, pageInfos],
   );
 
@@ -40,6 +40,7 @@ export const ChecklistModal: React.FC<ChecklistModalProps> = ({ open, onClose, p
     const md = exportChecklistMarkdown(
       pages.map((p) => p.id),
       pageInfos,
+      rawAnnotations,
     );
     try {
       await navigator.clipboard.writeText(md);
@@ -52,6 +53,7 @@ export const ChecklistModal: React.FC<ChecklistModalProps> = ({ open, onClose, p
     const md = exportChecklistMarkdown(
       pages.map((p) => p.id),
       pageInfos,
+      rawAnnotations,
     );
     const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);

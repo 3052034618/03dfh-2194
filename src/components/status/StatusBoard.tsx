@@ -130,14 +130,14 @@ const DroppableColumn: React.FC<{
   const flag = STATUS_FLAGS[status];
   const total = pages.length;
   const { setNodeRef, isOver } = useDroppable({ id: status, data: { status } });
+  const annotationsMap = useAnnotationStore((s) => s.annotations);
 
   const unresolvedCount = useMemo(() => {
-    const state = useAnnotationStore.getState();
     return pages.filter((p) => {
-      const anns = state.annotations[p.id] || [];
+      const anns = annotationsMap[p.id] || [];
       return anns.some((a) => !a.resolved);
     }).length;
-  }, [pages]);
+  }, [pages, annotationsMap]);
 
   return (
     <div

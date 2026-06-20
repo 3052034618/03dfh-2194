@@ -1,9 +1,10 @@
 import { create } from 'zustand';
-import type { Annotation, AnnotationTag, AnnotationRegion, UserRole } from '../types';
+import type { Annotation, AnnotationTag, AnnotationRegion, UserRole, MeetingFocus } from '../types';
 import { generateMockPages, buildMockAnnotationMap } from '../data/mockData';
 import { generateId } from '../utils/idGenerator';
 
 const STORAGE_KEY = 'mangaflow_annotations';
+const MEETING_STORAGE_KEY = 'mangaflow_meeting';
 
 export interface ChecklistItem {
   pageId: string;
@@ -19,6 +20,7 @@ interface AnnotationState {
   selectedAnnotationId: string | null;
   roleFilter: UserRole | 'all';
   tagFilter: AnnotationTag | 'all';
+  meetingFocus: MeetingFocus | null;
   setRoleFilter: (r: UserRole | 'all') => void;
   setTagFilter: (t: AnnotationTag | 'all') => void;
   addAnnotation: (
@@ -29,6 +31,9 @@ interface AnnotationState {
   deleteAnnotation: (annotationId: string) => void;
   resolveAnnotation: (annotationId: string, resolved: boolean) => void;
   setSelectedAnnotation: (id: string | null) => void;
+  startMeeting: (focus: Omit<MeetingFocus, 'startedAt'>) => void;
+  updateMeetingFocus: (updates: Partial<MeetingFocus>) => void;
+  endMeeting: () => void;
 }
 
 const loadFromStorage = (): Record<string, Annotation[]> | null => {
@@ -42,6 +47,24 @@ const loadFromStorage = (): Record<string, Annotation[]> | null => {
 const saveToStorage = (annotations: Record<string, Annotation[]>) => {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(annotations));
+  } catch {}
+};
+
+const loadMeetingFromStorage = (): MeetingFocus | null => {
+  try {
+    const raw = localStorage.getItem(MEETING_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return null;
+};
+
+const saveMeetingToStorage = (focus: MeetingFocus | null) => {
+  try {
+    if (focus) {
+      localStorage.setItem(MEETING_STORAGE_KEY, JSON.stringify(focus));
+    } else {
+      localStorage.removeItem(MEETING_STORAGE_KEY);
+    }
   } catch {}
 };
 
@@ -59,9 +82,22 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
   selectedAnnotationId: null,
   roleFilter: 'all',
   tagFilter: 'all',
+  meetingFocus: loadMeetingFromStorage(),
 
-  setRoleFilter: (r) => set({ roleFilter: r }),
-  setTagFilter: (t) => set({ tagFilter: t }),
+  setRoleFilter: (r) => {
+    set({ roleFilter: r });
+    const meeting = get().meetingFocus;
+    if (meeting) {
+      get().updateMeetingFocus({ roleFilter: r });
+    }
+  },
+  setTagFilter: (t) => {
+    set({ tagFilter: t });
+    const meeting = get().meetingFocus;
+    if (meeting) {
+      get().updateMeetingFocus({ tagFilter: t });
+    }
+  },
 
   addAnnotation: (pageId, data) => {
     const id = generateId('ann');
@@ -113,7 +149,41 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
     get().updateAnnotation(annotationId, { resolved });
   },
 
-  setSelectedAnnotation: (id) => set({ selectedAnnotationId: id }),
+  setSelectedAnnotation: (id) => {
+    set({ selectedAnnotationId: id });
+    const meeting = get().meetingFocus;
+    if (meeting) {
+      get().updateMeetingFocus({ selectedAnnotationId: id });
+    }
+  },
+
+  startMeeting: (focus) => {
+    const meeting: MeetingFocus = {
+      ...focus,
+      startedAt: new Date().toISOString(),
+    };
+    set({
+      meetingFocus: meeting,
+      roleFilter: focus.roleFilter,
+      tagFilter: focus.tagFilter,
+      selectedAnnotationId: focus.selectedAnnotationId,
+    });
+    saveMeetingToStorage(meeting);
+  },
+
+  updateMeetingFocus: (updates) => {
+    set((state) => {
+      if (!state.meetingFocus) return state;
+      const next = { ...state.meetingFocus, ...updates };
+      saveMeetingToStorage(next);
+      return { meetingFocus: next };
+    });
+  },
+
+  endMeeting: () => {
+    set({ meetingFocus: null });
+    saveMeetingToStorage(null);
+  },
 }));
 
 export function selectAnnotationsForPage(
@@ -142,12 +212,13 @@ export function selectAnnotationsForPageRaw(pageId: string): Annotation[] {
 export function generateChecklist(
   pageIds: string[],
   pages: { id: string; pageNumber: number; imageUrl: string }[],
+  annotationsOverride?: Record<string, Annotation[]>,
 ): ChecklistItem[] {
-  const state = useAnnotationStore.getState();
+  const annsToUse = annotationsOverride || useAnnotationStore.getState().annotations;
   const pageMap = new Map(pages.map((p) => [p.id, p]));
   const items: ChecklistItem[] = [];
   for (const pid of pageIds) {
-    const anns = state.annotations[pid] || [];
+    const anns = annsToUse[pid] || [];
     if (anns.length === 0) continue;
     const pageInfo = pageMap.get(pid);
     if (!pageInfo) continue;
@@ -166,8 +237,9 @@ export function generateChecklist(
 export function exportChecklistMarkdown(
   pageIds: string[],
   pages: { id: string; pageNumber: number; imageUrl: string }[],
+  annotationsOverride?: Record<string, Annotation[]>,
 ): string {
-  const items = generateChecklist(pageIds, pages);
+  const items = generateChecklist(pageIds, pages, annotationsOverride);
   const roleMap: Record<UserRole, string> = {
     author: '主笔',
     editor: '责编',

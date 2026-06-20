@@ -1,6 +1,6 @@
 import React from 'react';
-import { BookOpen, LayoutGrid, ListTodo, ClipboardList, Filter, Users } from 'lucide-react';
-import type { Work, Chapter, PageReviewStatus, UserRole } from '../../types';
+import { BookOpen, LayoutGrid, ListTodo, ClipboardList, Filter, Users, Video, VideoOff, Radio } from 'lucide-react';
+import type { Work, Chapter, PageReviewStatus, UserRole, MeetingFocus } from '../../types';
 import { STATUS_FLAGS } from '../../utils/tagConfig';
 import { cn } from '../../utils/idGenerator';
 import { ROLE_LABELS, ROLE_COLORS } from '../../utils/tagConfig';
@@ -19,6 +19,10 @@ interface TopNavbarProps {
   onSwitchView: (v: 'grid' | 'status') => void;
   currentRole: UserRole;
   onChangeRole: (r: UserRole) => void;
+  meetingFocus: MeetingFocus | null;
+  onStartMeeting: () => void;
+  onEndMeeting: () => void;
+  onJumpToMeetingFocus: () => void;
 }
 
 export const TopNavbar: React.FC<TopNavbarProps> = ({
@@ -34,6 +38,10 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
   onSwitchView,
   currentRole,
   onChangeRole,
+  meetingFocus,
+  onStartMeeting,
+  onEndMeeting,
+  onJumpToMeetingFocus,
 }) => {
   const users = useAuthStore((s) => s.allUsers);
   const filters: { v: PageReviewStatus | 'all'; label: string; key: keyof typeof stats | 'all' }[] = [
@@ -44,6 +52,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
   ];
 
   const progressPct = stats.total > 0 ? ((stats.approved + stats.needs_revision) / stats.total) * 100 : 0;
+  const meetingUser = meetingFocus ? users.find((u) => u.id === meetingFocus.startedBy) : null;
 
   return (
     <header className="flex-shrink-0 h-16 border-b border-ink-700/60 bg-ink-800/90 backdrop-blur-md flex items-center px-5 gap-5">
@@ -75,6 +84,21 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* 会议模式指示 */}
+      {meetingFocus && (
+        <button
+          onClick={onJumpToMeetingFocus}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-danger/10 border border-danger/40 text-danger animate-breathe hover:bg-danger/20 transition-all"
+          title="跳转到当前会议焦点"
+        >
+          <Radio className="w-3.5 h-3.5 animate-pulse" />
+          <span className="text-xs font-medium">会议进行中</span>
+          {meetingUser && (
+            <span className="text-[10px] text-danger/80">· {meetingUser.name}</span>
+          )}
+        </button>
       )}
 
       {/* 进度条 */}
@@ -190,6 +214,19 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
           })}
         </div>
       </div>
+
+      {/* 会议控制 */}
+      {meetingFocus ? (
+        <button onClick={onEndMeeting} className="btn-secondary flex items-center gap-2 text-sm py-1.5 border-danger/40 text-danger hover:bg-danger/10">
+          <VideoOff className="w-4 h-4" />
+          结束会议
+        </button>
+      ) : (
+        <button onClick={onStartMeeting} className="btn-secondary flex items-center gap-2 text-sm py-1.5 border-accent-400/40 text-accent-400 hover:bg-accent-400/10">
+          <Video className="w-4 h-4" />
+          发起会议
+        </button>
+      )}
 
       {/* 生成修改清单 */}
       <button onClick={onGenerateChecklist} className="btn-primary flex items-center gap-2 text-sm py-1.5">

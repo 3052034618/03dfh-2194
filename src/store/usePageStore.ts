@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { StoryPage, SpecialMark, PageReviewStatus } from '../types';
 import { generateMockPages, buildMockAnnotationMap } from '../data/mockData';
 import { generateId } from '../utils/idGenerator';
+import { filesToBase64 } from '../utils/imageUtils';
 
 const STORAGE_KEY = 'mangaflow_pages';
 
@@ -62,10 +63,7 @@ export const usePageStore = create<PageState>((set, get) => ({
   },
 
   uploadPages: async (chapterId, files) => {
-    const urls: string[] = [];
-    for (const f of files) {
-      urls.push(URL.createObjectURL(f));
-    }
+    const urls = await filesToBase64(files);
     set((state) => {
       const chapterPages = state.pages[chapterId] || [];
       const startOrder = chapterPages.length;

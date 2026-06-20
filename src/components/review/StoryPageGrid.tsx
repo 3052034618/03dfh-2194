@@ -13,13 +13,14 @@ import {
   sortableKeyboardCoordinates,
   rectSortingStrategy,
 } from '@dnd-kit/sortable';
-import type { StoryPage, SpecialMark, PageReviewStatus } from '../../types';
+import type { StoryPage, SpecialMark, PageReviewStatus, MeetingFocus } from '../../types';
 import { StoryPageCard } from './StoryPageCard';
 import { FileUploadZone } from './FileUploadZone';
 
 interface StoryPageGridProps {
   pages: StoryPage[];
   selectedId: string | null;
+  meetingFocus: MeetingFocus | null;
   onSelect: (pageId: string | null) => void;
   onReorder: (activeId: string, overId: string) => void;
   onOpenAnnotation: (pageId: string) => void;
@@ -32,6 +33,7 @@ interface StoryPageGridProps {
 export const StoryPageGrid: React.FC<StoryPageGridProps> = ({
   pages,
   selectedId,
+  meetingFocus,
   onSelect,
   onReorder,
   onOpenAnnotation,
@@ -74,6 +76,7 @@ export const StoryPageGrid: React.FC<StoryPageGridProps> = ({
                     key={p.id}
                     page={p}
                     selected={selectedId === p.id}
+                    meetingFocus={meetingFocus}
                     onClick={() => onSelect(p.id === selectedId ? null : p.id)}
                     onOpenAnnotation={() => onOpenAnnotation(p.id)}
                     onToggleMark={(m) => onToggleMark(p.id, m)}

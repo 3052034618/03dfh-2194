@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react';
-import type { Annotation, AnnotationRegion, AnnotationTag, UserRole } from '../../types';
+import type { AnnotationRegion, AnnotationTag, UserRole, Annotation, MeetingFocus } from '../../types';
 import { TAG_COLORS, TAG_LABELS, ROLE_LABELS } from '../../utils/tagConfig';
 import { cn } from '../../utils/idGenerator';
 import { Circle, Square, Trash2, ZoomIn, ZoomOut, RotateCcw, Check, X } from 'lucide-react';
@@ -17,10 +17,11 @@ interface DrawingState {
 interface AnnotationCanvasProps {
   pageId: string;
   imageUrl: string;
+  meetingFocus: MeetingFocus | null;
   onClose: () => void;
 }
 
-export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ pageId, imageUrl, onClose }) => {
+export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ pageId, imageUrl, meetingFocus, onClose }) => {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const [drawing, setDrawing] = useState<DrawingState | null>(null);
@@ -28,6 +29,7 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ pageId, imag
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const rawAnns = useAnnotationStore((s) => s.annotations[pageId]);
   const annotations = useMemo(() => rawAnns || [], [rawAnns]);
+  const focusAnnId = meetingFocus?.selectedAnnotationId;
   const addAnnotation = useAnnotationStore((s) => s.addAnnotation);
   const deleteAnnotation = useAnnotationStore((s) => s.deleteAnnotation);
   const resolveAnnotation = useAnnotationStore((s) => s.resolveAnnotation);
@@ -324,7 +326,7 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ pageId, imag
               >
                 {renderRegion(
                   a.region,
-                  selectedAnn === a.id ? '#fff' : TAG_COLORS[a.tag].stroke,
+                  a.id === focusAnnId ? '#ef4444' : selectedAnn === a.id ? '#fff' : TAG_COLORS[a.tag].stroke,
                   a.id,
                   <g>
                     <foreignObject
@@ -340,7 +342,9 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ pageId, imag
                       <div
                         className={cn(
                           'text-[9px] whitespace-nowrap px-1 rounded font-bold font-mono',
-                          a.resolved ? 'bg-success/90 text-ink-50' : 'bg-accent-400 text-ink-50',
+                          a.id === focusAnnId
+                            ? 'bg-danger text-ink-50 animate-breathe'
+                            : a.resolved ? 'bg-success/90 text-ink-50' : 'bg-accent-400 text-ink-50',
                         )}
                         style={{ display: 'inline-block' }}
                       >

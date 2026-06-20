@@ -85,3 +85,13 @@ export interface Annotation {
   createdAt: string;
   resolved: boolean;
 }
+
+export interface MeetingFocus {
+  chapterId: string;
+  pageId: string | null;
+  roleFilter: UserRole | 'all';
+  tagFilter: AnnotationTag | 'all';
+  selectedAnnotationId: string | null;
+  startedBy: string;
+  startedAt: string;
+}

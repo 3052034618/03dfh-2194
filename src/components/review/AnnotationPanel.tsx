@@ -1,12 +1,13 @@
 import React, { useMemo } from 'react';
-import type { StoryPage, UserRole, AnnotationTag } from '../../types';
+import type { StoryPage, UserRole, AnnotationTag, MeetingFocus } from '../../types';
 import { TAG_LABELS, TAG_COLORS, ROLE_LABELS } from '../../utils/tagConfig';
 import { cn } from '../../utils/idGenerator';
-import { MessageSquarePlus, User, Palette, Scroll, Type, Filter, Tag, EyeOff } from 'lucide-react';
+import { MessageSquarePlus, User, Palette, Scroll, Type, Filter, Tag, EyeOff, Radio } from 'lucide-react';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
 
 interface AnnotationPanelProps {
   page: StoryPage | undefined;
+  meetingFocus: MeetingFocus | null;
   onOpenCanvas: () => void;
 }
 
@@ -17,7 +18,7 @@ const ROLE_ICONS = {
   text_editor: Type,
 };
 
-export const AnnotationPanel: React.FC<AnnotationPanelProps> = ({ page, onOpenCanvas }) => {
+export const AnnotationPanel: React.FC<AnnotationPanelProps> = ({ page, meetingFocus, onOpenCanvas }) => {
   const roleFilter = useAnnotationStore((s) => s.roleFilter);
   const tagFilter = useAnnotationStore((s) => s.tagFilter);
   const setRoleFilter = useAnnotationStore((s) => s.setRoleFilter);
@@ -30,6 +31,9 @@ export const AnnotationPanel: React.FC<AnnotationPanelProps> = ({ page, onOpenCa
       .filter((a) => (tagFilter === 'all' ? true : a.tag === tagFilter))
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   }, [rawAnns, roleFilter, tagFilter]);
+  const focusAnnId = meetingFocus?.selectedAnnotationId;
+  const selectedAnnId = useAnnotationStore((s) => s.selectedAnnotationId);
+  const setSelectedAnn = useAnnotationStore((s) => s.setSelectedAnnotation);
 
   const roles: (UserRole | 'all')[] = ['all', 'editor', 'art_supervisor', 'text_editor', 'author'];
   const tags: (AnnotationTag | 'all')[] = [
@@ -46,6 +50,16 @@ export const AnnotationPanel: React.FC<AnnotationPanelProps> = ({ page, onOpenCa
 
   return (
     <aside className="h-full w-[360px] flex-shrink-0 border-l border-ink-700/60 bg-ink-850/70 backdrop-blur-sm flex flex-col">
+      {/* 会议焦点提示 */}
+      {meetingFocus && meetingFocus.pageId === page?.id && (
+        <div className="px-4 py-2.5 bg-danger/10 border-b border-danger/30 flex items-center gap-2">
+          <Radio className="w-3.5 h-3.5 text-danger animate-pulse" />
+          <span className="text-[11px] text-danger font-medium">
+            当前为会议讨论焦点
+            {focusAnnId && <span className="ml-1">· 正在讨论 #{anns.findIndex((a) => a.id === focusAnnId) + 1}</span>}
+          </span>
+        </div>
+      )}
       {/* 头部 */}
       <div className="flex-shrink-0 px-4 py-3 border-b border-ink-700/60">
         <div className="flex items-center justify-between mb-3">
@@ -154,9 +168,14 @@ export const AnnotationPanel: React.FC<AnnotationPanelProps> = ({ page, onOpenCa
               return (
                 <div
                   key={a.id}
+                  onClick={() => setSelectedAnn(selectedAnnId === a.id ? null : a.id)}
                   className={cn(
-                    'rounded-lg border p-3 transition-all animate-fade-in-up',
-                    a.resolved
+                    'rounded-lg border p-3 transition-all animate-fade-in-up cursor-pointer',
+                    a.id === focusAnnId
+                      ? 'border-danger bg-danger/10 shadow-[0_0_15px_rgba(239,68,68,0.25)]'
+                      : a.id === selectedAnnId
+                      ? 'border-accent-400/60 bg-accent-400/10'
+                      : a.resolved
                       ? 'border-success/30 bg-success/5 opacity-80'
                       : 'border-ink-700/60 bg-ink-900/40 hover:border-ink-600/80 hover:bg-ink-800/40',
                   )}
