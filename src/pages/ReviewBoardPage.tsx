@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { TopNavbar } from '../components/review/TopNavbar';
 import { StoryBeatSidebar } from '../components/review/StoryBeatSidebar';
@@ -10,33 +10,32 @@ import { ChecklistModal } from '../components/checklist/ChecklistModal';
 import { FileUploadZone } from '../components/review/FileUploadZone';
 import { Modal } from '../components/common/Modal';
 import { useWorkStore } from '../store/useWorkStore';
-import { usePageStore } from '../store/usePageStore';
+import { usePageStore, selectFilteredPages, selectAllPages, selectPageStats } from '../store/usePageStore';
+import { useAnnotationStore } from '../store/useAnnotationStore';
 import { useAuthStore } from '../store/useAuthStore';
 import type { PageReviewStatus, SpecialMark, UserRole } from '../types';
-import { ImagePlus, X } from 'lucide-react';
+import { ImagePlus } from 'lucide-react';
 
 const ReviewBoardPage: React.FC = () => {
   const { workId, chapterId } = useParams<{ workId: string; chapterId: string }>();
   const navigate = useNavigate();
 
-  const work = useWorkStore((s) => (workId ? s.getWorkById(workId) : undefined));
-  const chapter = useWorkStore((s) => (chapterId ? s.getChapterById(chapterId) : undefined));
-  const beats = useWorkStore((s) => (chapterId ? s.getBeatsByChapter(chapterId) : []));
+  const work = useWorkStore((s) => s.works.find((w) => w.id === workId));
+  const chapter = useWorkStore((s) => s.chapters.find((c) => c.id === chapterId));
+  const beats = useWorkStore((s) => s.storyBeats.filter((b) => b.chapterId === chapterId).sort((a, b) => a.orderIndex - b.orderIndex));
   const setCurrentWork = useWorkStore((s) => s.setCurrentWork);
   const setCurrentChapter = useWorkStore((s) => s.setCurrentChapter);
 
-  const pages = usePageStore((s) => (chapterId ? s.getPagesForChapter(chapterId) : []));
-  const allPagesRaw = usePageStore((s) => s.pages[chapterId || ''] || []);
+  const rawPages = usePageStore((s) => s.pages[chapterId || ''] || []);
   const selectedId = usePageStore((s) => s.selectedPageId);
   const statusFilter = usePageStore((s) => s.statusFilter);
-  const stats = usePageStore((s) => (chapterId ? s.getPageStats(chapterId) : { pending: 0, needs_revision: 0, approved: 0 }));
-  const initPages = usePageStore((s) => s.initPagesForChapter);
   const setSelected = usePageStore((s) => s.setSelectedPage);
   const setFilter = usePageStore((s) => s.setStatusFilter);
   const reorder = usePageStore((s) => s.reorderPages);
   const toggleMark = usePageStore((s) => s.toggleSpecialMark);
   const setPageStatus = usePageStore((s) => s.setPageStatus);
   const uploadPages = usePageStore((s) => s.uploadPages);
+  const initPages = usePageStore((s) => s.initPagesForChapter);
 
   const currentUser = useAuthStore((s) => s.currentUser);
   const [viewMode, setViewMode] = useState<'grid' | 'status'>('grid');
@@ -52,35 +51,52 @@ const ReviewBoardPage: React.FC = () => {
       setCurrentChapter(chapterId);
       initPages(chapterId, 0);
     }
-  }, [workId, chapterId, setCurrentWork, setCurrentChapter, initPages]);
+  }, [workId, chapterId]);
 
   useEffect(() => {
     setRole(currentUser.role);
   }, [currentUser.role]);
 
+  const allPages = useMemo(
+    () => rawPages.slice().sort((a, b) => a.sortOrder - b.sortOrder),
+    [rawPages],
+  );
+
+  const filteredPages = useMemo(
+    () =>
+      statusFilter === 'all'
+        ? allPages
+        : allPages.filter((p) => p.reviewStatus === statusFilter),
+    [allPages, statusFilter],
+  );
+
+  const stats = useMemo(
+    () => selectPageStats(chapterId || ''),
+    [rawPages, chapterId],
+  );
+
   const selectedPage = useMemo(
-    () => pages.find((p) => p.id === selectedId),
-    [pages, selectedId],
+    () => allPages.find((p) => p.id === selectedId),
+    [allPages, selectedId],
   );
+
   const canvasPage = useMemo(
-    () => allPagesRaw.find((p) => p.id === canvasPageId),
-    [allPagesRaw, canvasPageId],
+    () => allPages.find((p) => p.id === canvasPageId),
+    [allPages, canvasPageId],
   );
-  const totalPages = allPagesRaw.length;
 
-  const handleJumpToPage = (pageNumber: number) => {
-    const target = allPagesRaw.find((p) => p.pageNumber === pageNumber);
-    if (target) setSelected(target.id);
-  };
+  const handleJumpToPage = useCallback(
+    (pageNumber: number) => {
+      const target = allPages.find((p) => p.pageNumber === pageNumber);
+      if (target) setSelected(target.id);
+    },
+    [allPages, setSelected],
+  );
 
-  const totalStats = {
-    ...stats,
-    total: totalPages,
-  };
+  const totalStats = useMemo(() => ({ ...stats, total: allPages.length }), [stats, allPages.length]);
 
   return (
     <div className="h-full w-full flex flex-col bg-ink-900">
-      {/* 顶栏 */}
       <TopNavbar
         work={work}
         chapter={chapter}
@@ -97,29 +113,26 @@ const ReviewBoardPage: React.FC = () => {
       />
 
       <div className="flex-1 flex overflow-hidden">
-        {/* 剧情节点侧边栏 */}
         <StoryBeatSidebar
           beats={beats}
-          pages={allPagesRaw}
+          pages={allPages}
           selectedPage={selectedPage}
           collapsed={beatCollapsed}
           onToggleCollapse={() => setBeatCollapsed((v) => !v)}
           onJumpToPage={handleJumpToPage}
         />
 
-        {/* 主区域 */}
         <div className="flex-1 flex flex-col overflow-hidden relative bg-ink-900 bg-paper-texture">
-          {/* 工具栏 */}
           <div className="flex items-center justify-between px-5 py-2.5 border-b border-ink-700/60 bg-ink-850/60 backdrop-blur-sm flex-shrink-0">
             <div className="flex items-center gap-3">
               <div className="text-sm text-ink-200">
                 {viewMode === 'grid' ? (
                   <>
-                    共 <span className="font-mono font-bold text-accent-400">{totalPages}</span> 页分镜
+                    共 <span className="font-mono font-bold text-accent-400">{allPages.length}</span> 页分镜
                     {statusFilter !== 'all' && (
                       <>
                         {' · 当前筛选 '}
-                        <span className="font-mono text-accent-400">{pages.length}</span> 页
+                        <span className="font-mono text-accent-400">{filteredPages.length}</span> 页
                       </>
                     )}
                   </>
@@ -143,10 +156,9 @@ const ReviewBoardPage: React.FC = () => {
             </div>
           </div>
 
-          {/* 画布 / 网格 / 状态看板 */}
           {viewMode === 'grid' ? (
             <StoryPageGrid
-              pages={pages}
+              pages={filteredPages}
               selectedId={selectedId}
               onSelect={setSelected}
               onReorder={(a, o) => chapterId && reorder(chapterId, a, o)}
@@ -157,7 +169,7 @@ const ReviewBoardPage: React.FC = () => {
             />
           ) : (
             <StatusBoard
-              pages={allPagesRaw}
+              pages={allPages}
               onSetStatus={(pid, s) => chapterId && setPageStatus(chapterId, pid, s)}
               onSelectPage={setSelected}
               onOpenAnnotation={(pid) => setCanvasPageId(pid)}
@@ -165,34 +177,17 @@ const ReviewBoardPage: React.FC = () => {
           )}
         </div>
 
-        {/* 批注面板 */}
         <AnnotationPanel page={selectedPage} onOpenCanvas={() => selectedId && setCanvasPageId(selectedId)} />
       </div>
 
-      {/* 逐格审稿弹窗 */}
       {canvasPage && (
-        <Modal
-          open={!!canvasPage}
-          onClose={() => setCanvasPageId(null)}
-          size="full"
-          className="!rounded-xl"
-        >
-          <AnnotationCanvas
-            pageId={canvasPage.id}
-            imageUrl={canvasPage.imageUrl}
-            onClose={() => setCanvasPageId(null)}
-          />
+        <Modal open={!!canvasPage} onClose={() => setCanvasPageId(null)} size="full" className="!rounded-xl">
+          <AnnotationCanvas pageId={canvasPage.id} imageUrl={canvasPage.imageUrl} onClose={() => setCanvasPageId(null)} />
         </Modal>
       )}
 
-      {/* 修改清单 */}
-      <ChecklistModal
-        open={checklistOpen}
-        onClose={() => setChecklistOpen(false)}
-        pages={allPagesRaw}
-      />
+      <ChecklistModal open={checklistOpen} onClose={() => setChecklistOpen(false)} pages={allPages} />
 
-      {/* 上传弹窗 */}
       <Modal
         open={uploadOpen}
         onClose={() => setUploadOpen(false)}

@@ -1,5 +1,4 @@
 import type { Work, Chapter, StoryBeat, StoryPage, Annotation, User } from '../types';
-import { generateId } from '../utils/idGenerator';
 
 export const mockUsers: User[] = [
   { id: 'user_001', name: '林秋野', role: 'author', avatarColor: '#10B981' },
@@ -130,7 +129,7 @@ export const generateMockPages = (chapterId: string, count = 20): StoryPage[] =>
     if (pageNumber >= 15 && pageNumber <= 17) status = 'needs_revision';
     if (pageNumber >= 18) status = 'pending';
     pages.push({
-      id: generateId('page'),
+      id: `page_${chapterId}_${pageNumber}`,
       chapterId,
       pageNumber,
       imageUrl: `https://picsum.photos/seed/${seedImages[i] || 'manga' + pageNumber}/800/1120`,
@@ -143,78 +142,109 @@ export const generateMockPages = (chapterId: string, count = 20): StoryPage[] =>
   return pages;
 };
 
-export const mockAnnotations: Annotation[] = [
-  {
-    id: generateId('ann'),
-    pageId: 'page_mock_11',
-    createdBy: 'user_002',
-    creatorRole: 'editor',
-    tag: 'unclear_composition',
-    description: '这个远景镜头角度不够清楚，建议增加主角面部特写以凸显表情。',
-    region: { type: 'rectangle', x: 30, y: 20, width: 40, height: 35 },
-    createdAt: '2026-06-20T10:30',
-    resolved: false,
-  },
-  {
-    id: generateId('ann'),
-    pageId: 'page_mock_11',
-    createdBy: 'user_003',
-    creatorRole: 'art_supervisor',
-    tag: 'layout_issue',
-    description: '下方人物站位构图略偏，可右移腾出对白区。',
-    region: { type: 'circle', x: 65, y: 70, radius: 18 },
-    createdAt: '2026-06-20T10:45',
-    resolved: false,
-  },
-  {
-    id: generateId('ann'),
-    pageId: 'page_mock_12',
-    createdBy: 'user_004',
-    creatorRole: 'text_editor',
-    tag: 'dialog_obstruction',
-    description: '此处对话框遮挡了关键手势动作，请调整对白框位置到画面上方。',
-    region: { type: 'rectangle', x: 20, y: 55, width: 35, height: 25 },
-    createdAt: '2026-06-20T11:00',
-    resolved: false,
-  },
-  {
-    id: generateId('ann'),
-    pageId: 'page_mock_13',
-    createdBy: 'user_002',
-    creatorRole: 'editor',
-    tag: 'fast_pacing',
-    description: '这段信息交代节奏太快，建议拆分为两格并加一格主角反应特写。',
-    region: { type: 'rectangle', x: 10, y: 10, width: 80, height: 80 },
-    createdAt: '2026-06-20T11:15',
-    resolved: false,
-  },
-  {
-    id: generateId('ann'),
-    pageId: 'page_mock_15',
-    createdBy: 'user_003',
-    creatorRole: 'art_supervisor',
-    tag: 'art_style',
-    description: '月光阴影处理可加强层次感，参考第15话中类似场景。',
-    region: { type: 'circle', x: 50, y: 40, radius: 25 },
-    createdAt: '2026-06-20T14:20',
-    resolved: false,
-  },
-  {
-    id: generateId('ann'),
-    pageId: 'page_mock_16',
-    createdBy: 'user_004',
-    creatorRole: 'text_editor',
-    tag: 'text_error',
-    description: '"背水一战"四字的字体在该场景下太现代，建议换古风字型。',
-    region: { type: 'rectangle', x: 45, y: 30, width: 25, height: 12 },
-    createdAt: '2026-06-20T14:35',
-    resolved: false,
-  },
-];
+const buildMockAnnotations = (pages: StoryPage[]): Annotation[] => {
+  const pageMap = new Map<number, string>();
+  for (const p of pages) {
+    pageMap.set(p.pageNumber, p.id);
+  }
+  return [
+    {
+      id: 'ann_001',
+      pageId: pageMap.get(11)!,
+      createdBy: 'user_002',
+      creatorRole: 'editor' as const,
+      tag: 'unclear_composition' as const,
+      description: '这个远景镜头角度不够清楚，建议增加主角面部特写以凸显表情。',
+      region: { type: 'rectangle' as const, x: 30, y: 20, width: 40, height: 35 },
+      createdAt: '2026-06-20T10:30',
+      resolved: false,
+    },
+    {
+      id: 'ann_002',
+      pageId: pageMap.get(11)!,
+      createdBy: 'user_003',
+      creatorRole: 'art_supervisor' as const,
+      tag: 'layout_issue' as const,
+      description: '下方人物站位构图略偏，可右移腾出对白区。',
+      region: { type: 'circle' as const, x: 65, y: 70, radius: 18 },
+      createdAt: '2026-06-20T10:45',
+      resolved: false,
+    },
+    {
+      id: 'ann_003',
+      pageId: pageMap.get(12)!,
+      createdBy: 'user_004',
+      creatorRole: 'text_editor' as const,
+      tag: 'dialog_obstruction' as const,
+      description: '此处对话框遮挡了关键手势动作，请调整对白框位置到画面上方。',
+      region: { type: 'rectangle' as const, x: 20, y: 55, width: 35, height: 25 },
+      createdAt: '2026-06-20T11:00',
+      resolved: false,
+    },
+    {
+      id: 'ann_004',
+      pageId: pageMap.get(13)!,
+      createdBy: 'user_002',
+      creatorRole: 'editor' as const,
+      tag: 'fast_pacing' as const,
+      description: '这段信息交代节奏太快，建议拆分为两格并加一格主角反应特写。',
+      region: { type: 'rectangle' as const, x: 10, y: 10, width: 80, height: 80 },
+      createdAt: '2026-06-20T11:15',
+      resolved: false,
+    },
+    {
+      id: 'ann_005',
+      pageId: pageMap.get(15)!,
+      createdBy: 'user_003',
+      creatorRole: 'art_supervisor' as const,
+      tag: 'art_style' as const,
+      description: '月光阴影处理可加强层次感，参考第15话中类似场景。',
+      region: { type: 'circle' as const, x: 50, y: 40, radius: 25 },
+      createdAt: '2026-06-20T14:20',
+      resolved: false,
+    },
+    {
+      id: 'ann_006',
+      pageId: pageMap.get(16)!,
+      createdBy: 'user_004',
+      creatorRole: 'text_editor' as const,
+      tag: 'text_error' as const,
+      description: '"背水一战"四字的字体在该场景下太现代，建议换古风字型。',
+      region: { type: 'rectangle' as const, x: 45, y: 30, width: 25, height: 12 },
+      createdAt: '2026-06-20T14:35',
+      resolved: false,
+    },
+    {
+      id: 'ann_007',
+      pageId: pageMap.get(14)!,
+      createdBy: 'user_002',
+      creatorRole: 'editor' as const,
+      tag: 'continuity' as const,
+      description: '此处与上一页的视角衔接有跳跃感，建议加一格过渡。',
+      region: { type: 'rectangle' as const, x: 15, y: 25, width: 50, height: 40 },
+      createdAt: '2026-06-20T11:30',
+      resolved: false,
+    },
+    {
+      id: 'ann_008',
+      pageId: pageMap.get(17)!,
+      createdBy: 'user_003',
+      creatorRole: 'art_supervisor' as const,
+      tag: 'unclear_composition' as const,
+      description: '高速运动格的速度线方向不统一，建议统一为从左上到右下。',
+      region: { type: 'circle' as const, x: 45, y: 55, radius: 20 },
+      createdAt: '2026-06-20T14:50',
+      resolved: false,
+    },
+  ].filter((a) => a.pageId) as Annotation[];
+};
 
-export const initMockPageIds = (pages: StoryPage[]): Annotation[] => {
-  return mockAnnotations.map((ann, idx) => ({
-    ...ann,
-    pageId: pages[idx + 10]?.id || pages[0].id,
-  }));
+export const buildMockAnnotationMap = (pages: StoryPage[]): Record<string, Annotation[]> => {
+  const anns = buildMockAnnotations(pages);
+  const grouped: Record<string, Annotation[]> = {};
+  for (const a of anns) {
+    if (!grouped[a.pageId]) grouped[a.pageId] = [];
+    grouped[a.pageId].push(a);
+  }
+  return grouped;
 };

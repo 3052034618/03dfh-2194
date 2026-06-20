@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { Modal } from '../common/Modal';
 import type { StoryPage, Annotation } from '../../types';
-import { TAG_LABELS, TAG_COLORS, ROLE_LABELS, type TagColor } from '../../utils/tagConfig';
+import { TAG_LABELS, TAG_COLORS, ROLE_LABELS } from '../../utils/tagConfig';
 import { cn } from '../../utils/idGenerator';
-import { useAnnotationStore } from '../../store/useAnnotationStore';
+import { useAnnotationStore, generateChecklist, exportChecklistMarkdown, type ChecklistItem } from '../../store/useAnnotationStore';
 import { ClipboardCheck, Copy, FileDown, Check as CheckIcon, MessageSquare } from 'lucide-react';
 
 interface ChecklistModalProps {
@@ -15,14 +15,20 @@ interface ChecklistModalProps {
 type AnnotationWithPage = Annotation & { pageId: string; pageNumber: number };
 
 export const ChecklistModal: React.FC<ChecklistModalProps> = ({ open, onClose, pages }) => {
-  const items = useAnnotationStore((s) => s.generateChecklist(
-    pages.map((p) => p.id),
-    pages.map((p) => ({ id: p.id, pageNumber: p.pageNumber, imageUrl: p.imageUrl })),
-  ));
+  const rawAnnotations = useAnnotationStore((s) => s.annotations);
   const resolveAnn = useAnnotationStore((s) => s.resolveAnnotation);
-  const exportMd = useAnnotationStore((s) => s.exportChecklistMarkdown);
   const [copied, setCopied] = useState(false);
   const [view, setView] = useState<'by_page' | 'by_role'>('by_page');
+
+  const pageInfos = useMemo(
+    () => pages.map((p) => ({ id: p.id, pageNumber: p.pageNumber, imageUrl: p.imageUrl })),
+    [pages],
+  );
+
+  const items: ChecklistItem[] = useMemo(
+    () => generateChecklist(pages.map((p) => p.id), pageInfos),
+    [rawAnnotations, pages, pageInfos],
+  );
 
   const stats = useMemo(() => {
     const total = items.reduce((acc, i) => acc + i.totalCount, 0);
@@ -31,9 +37,9 @@ export const ChecklistModal: React.FC<ChecklistModalProps> = ({ open, onClose, p
   }, [items]);
 
   const handleCopy = async () => {
-    const md = exportMd(
+    const md = exportChecklistMarkdown(
       pages.map((p) => p.id),
-      pages.map((p) => ({ id: p.id, pageNumber: p.pageNumber, imageUrl: p.imageUrl })),
+      pageInfos,
     );
     try {
       await navigator.clipboard.writeText(md);
@@ -43,9 +49,9 @@ export const ChecklistModal: React.FC<ChecklistModalProps> = ({ open, onClose, p
   };
 
   const handleDownload = () => {
-    const md = exportMd(
+    const md = exportChecklistMarkdown(
       pages.map((p) => p.id),
-      pages.map((p) => ({ id: p.id, pageNumber: p.pageNumber, imageUrl: p.imageUrl })),
+      pageInfos,
     );
     const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -131,7 +137,6 @@ export const ChecklistModal: React.FC<ChecklistModalProps> = ({ open, onClose, p
       }
     >
       <div className="p-5">
-        {/* 总览进度 */}
         <div className="mb-6 rounded-xl border border-ink-700/60 bg-ink-900/50 p-4">
           <div className="flex items-center justify-between mb-3">
             <div className="text-sm section-title">整体进度</div>
@@ -185,8 +190,8 @@ export const ChecklistModal: React.FC<ChecklistModalProps> = ({ open, onClose, p
                         <span className="font-serif text-lg font-bold text-ink-50">
                           第 {item.pageNumber} 页
                         </span>
-                        {pageInfo?.specialMarks.length! > 0 &&
-                          pageInfo?.specialMarks.map((m) => (
+                        {pageInfo?.specialMarks && pageInfo.specialMarks.length > 0 &&
+                          pageInfo.specialMarks.map((m) => (
                             <span
                               key={m}
                               className={cn(

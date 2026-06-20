@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import type { StoryPage, UserRole, AnnotationTag } from '../../types';
 import { TAG_LABELS, TAG_COLORS, ROLE_LABELS } from '../../utils/tagConfig';
 import { cn } from '../../utils/idGenerator';
@@ -22,7 +22,14 @@ export const AnnotationPanel: React.FC<AnnotationPanelProps> = ({ page, onOpenCa
   const tagFilter = useAnnotationStore((s) => s.tagFilter);
   const setRoleFilter = useAnnotationStore((s) => s.setRoleFilter);
   const setTagFilter = useAnnotationStore((s) => s.setTagFilter);
-  const anns = page ? useAnnotationStore((s) => s.getAnnotationsForPage(page.id)) : [];
+  const rawAnns = useAnnotationStore((s) => (page ? s.annotations[page.id] : undefined));
+  const anns = useMemo(() => {
+    if (!rawAnns) return [];
+    return rawAnns
+      .filter((a) => (roleFilter === 'all' ? true : a.creatorRole === roleFilter))
+      .filter((a) => (tagFilter === 'all' ? true : a.tag === tagFilter))
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }, [rawAnns, roleFilter, tagFilter]);
 
   const roles: (UserRole | 'all')[] = ['all', 'editor', 'art_supervisor', 'text_editor', 'author'];
   const tags: (AnnotationTag | 'all')[] = [

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { StoryPage, SpecialMark } from '../../types';
@@ -33,7 +33,8 @@ export const StoryPageCard: React.FC<StoryPageCardProps> = ({
     transition,
     opacity: isDragging ? 0.5 : 1,
   };
-  const anns = useAnnotationStore((s) => s.getAnnotationsForPage(page.id));
+  const rawAnns = useAnnotationStore((s) => s.annotations[page.id]);
+  const anns = useMemo(() => rawAnns || [], [rawAnns]);
   const [menuOpen, setMenuOpen] = useState(false);
 
   const flagCfg = STATUS_FLAGS[page.reviewStatus];

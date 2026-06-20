@@ -1,16 +1,17 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   DndContext,
-  closestCenter,
+  useDroppable,
   KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
   type DragEndEvent,
+  DragOverlay,
+  closestCorners,
 } from '@dnd-kit/core';
 import {
   SortableContext,
-  sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
@@ -41,7 +42,8 @@ const DraggableCard: React.FC<{
 }> = ({ page, onSelect, onOpenAnnotation }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: page.id });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1 };
-  const anns = useAnnotationStore((s) => s.annotations[page.id] || []);
+  const rawAnns = useAnnotationStore((s) => s.annotations[page.id]);
+  const annCount = useMemo(() => (rawAnns ? rawAnns.length : 0), [rawAnns]);
   const flag = STATUS_FLAGS[page.reviewStatus];
 
   return (
@@ -97,7 +99,7 @@ const DraggableCard: React.FC<{
               <span className="w-1.5 h-1.5 rounded-full" style={{ background: flag.flag }} />
               {flag.label}
             </div>
-            {anns.length > 0 && (
+            {annCount > 0 && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -106,7 +108,7 @@ const DraggableCard: React.FC<{
                 className="text-[10px] chip border border-accent-400/40 bg-accent-400/10 text-accent-400 hover:bg-accent-400/20"
               >
                 <MessageSquare className="w-2.5 h-2.5" />
-                {anns.length}
+                {annCount}
               </button>
             )}
           </div>
@@ -116,22 +118,35 @@ const DraggableCard: React.FC<{
   );
 };
 
-const StatusColumn: React.FC<{
+const DroppableColumn: React.FC<{
   status: PageReviewStatus;
   label: string;
   Icon: typeof Eye;
   pages: StoryPage[];
+  totalPages: number;
   onSelectPage: (id: string) => void;
   onOpenAnnotation: (id: string) => void;
-}> = ({ status, label, Icon, pages, onSelectPage, onOpenAnnotation }) => {
+}> = ({ status, label, Icon, pages, totalPages, onSelectPage, onOpenAnnotation }) => {
   const flag = STATUS_FLAGS[status];
   const total = pages.length;
-  const unresolvedPages = pages.filter((p) => {
-    const anns = (useAnnotationStore.getState().annotations[p.id] || []).filter((a) => !a.resolved);
-    return anns.length > 0;
-  }).length;
+  const { setNodeRef, isOver } = useDroppable({ id: status, data: { status } });
+
+  const unresolvedCount = useMemo(() => {
+    const state = useAnnotationStore.getState();
+    return pages.filter((p) => {
+      const anns = state.annotations[p.id] || [];
+      return anns.some((a) => !a.resolved);
+    }).length;
+  }, [pages]);
+
   return (
-    <div className="flex-1 min-w-0 flex flex-col rounded-xl border border-ink-700/60 bg-ink-900/40 overflow-hidden">
+    <div
+      ref={setNodeRef}
+      className={cn(
+        'flex-1 min-w-0 flex flex-col rounded-xl border transition-colors overflow-hidden',
+        isOver ? 'border-accent-400/60 bg-accent-400/5' : 'border-ink-700/60 bg-ink-900/40',
+      )}
+    >
       <div className={cn('px-4 py-3 border-b border-ink-700/60', flag.bg)}>
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2">
@@ -141,9 +156,9 @@ const StatusColumn: React.FC<{
           <div className="text-xs">
             <span className="font-mono font-bold text-ink-50">{total}</span>
             <span className="text-ink-300/70 ml-0.5">页</span>
-            {unresolvedPages > 0 && (
+            {unresolvedCount > 0 && (
               <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-danger/30 text-[#F5C7B8]">
-                {unresolvedPages} 有批注
+                {unresolvedCount} 有批注
               </span>
             )}
           </div>
@@ -152,7 +167,7 @@ const StatusColumn: React.FC<{
           <div
             className="h-full rounded-full transition-all"
             style={{
-              width: `${total > 0 ? (total / Math.max(1, useAnnotationStore.getState && 0)) * 100 : 0}%`,
+              width: `${totalPages > 0 ? (total / totalPages) * 100 : 0}%`,
               background: flag.flag,
               opacity: 0.4,
             }}
@@ -162,7 +177,12 @@ const StatusColumn: React.FC<{
       <div className="flex-1 overflow-auto p-3 space-y-2 min-h-[300px]">
         <SortableContext items={pages.map((p) => p.id)} strategy={verticalListSortingStrategy}>
           {pages.length === 0 ? (
-            <div className="h-full flex items-center justify-center text-xs text-ink-400 py-12 border-2 border-dashed border-ink-700/40 rounded-lg">
+            <div
+              className={cn(
+                'h-full flex items-center justify-center text-xs py-12 border-2 border-dashed rounded-lg transition-colors',
+                isOver ? 'border-accent-400/60 text-accent-400 bg-accent-400/5' : 'border-ink-700/40 text-ink-400',
+              )}
+            >
               拖拽分镜页到此列
             </div>
           ) : (
@@ -184,38 +204,48 @@ const StatusColumn: React.FC<{
 export const StatusBoard: React.FC<StatusBoardProps> = ({ pages, onSetStatus, onSelectPage, onOpenAnnotation }) => {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    useSensor(KeyboardSensor),
   );
 
-  const pageMap = new Map(pages.map((p) => [p.id, p]));
+  const pageMap = useMemo(() => new Map(pages.map((p) => [p.id, p])), [pages]);
 
   const handleDragEnd = (e: DragEndEvent) => {
     const { active, over } = e;
     if (!over) return;
-    const from = pageMap.get(String(active.id))?.reviewStatus;
+
+    const activeId = String(active.id);
+    const overId = String(over.id);
+
+    const from = pageMap.get(activeId)?.reviewStatus;
     let to: PageReviewStatus | undefined;
-    if (COLUMNS.some((c) => c.status === String(over.id))) {
-      to = String(over.id) as PageReviewStatus;
+
+    const colStatus = COLUMNS.find((c) => c.status === overId);
+    if (colStatus) {
+      to = colStatus.status;
     } else {
-      to = pageMap.get(String(over.id))?.reviewStatus;
+      const overPage = pageMap.get(overId);
+      if (overPage) {
+        to = overPage.reviewStatus;
+      }
     }
-    if (!from || !to || from === to) {
-      // 同列内顺序变动：我们不处理排序（仅按页号维持），只处理跨列
-      return;
-    }
-    onSetStatus(String(active.id), to);
+
+    if (!from || !to || from === to) return;
+    onSetStatus(activeId, to);
   };
 
+  const totalPages = pages.length;
+
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+    <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
       <div className="h-full w-full p-6 flex gap-5 overflow-auto">
         {COLUMNS.map((col) => (
-          <StatusColumn
+          <DroppableColumn
             key={col.status}
             status={col.status}
             label={col.label}
             Icon={col.icon}
             pages={pages.filter((p) => p.reviewStatus === col.status).sort((a, b) => a.pageNumber - b.pageNumber)}
+            totalPages={totalPages}
             onSelectPage={onSelectPage}
             onOpenAnnotation={onOpenAnnotation}
           />

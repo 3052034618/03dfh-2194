@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import type { Annotation, AnnotationRegion, AnnotationTag, UserRole } from '../../types';
 import { TAG_COLORS, TAG_LABELS, ROLE_LABELS } from '../../utils/tagConfig';
 import { cn } from '../../utils/idGenerator';
@@ -26,7 +26,8 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ pageId, imag
   const [drawing, setDrawing] = useState<DrawingState | null>(null);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
-  const annotations = useAnnotationStore((s) => s.getAnnotationsForPage(pageId));
+  const rawAnns = useAnnotationStore((s) => s.annotations[pageId]);
+  const annotations = useMemo(() => rawAnns || [], [rawAnns]);
   const addAnnotation = useAnnotationStore((s) => s.addAnnotation);
   const deleteAnnotation = useAnnotationStore((s) => s.deleteAnnotation);
   const resolveAnnotation = useAnnotationStore((s) => s.resolveAnnotation);

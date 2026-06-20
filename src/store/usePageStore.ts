@@ -1,28 +1,45 @@
 import { create } from 'zustand';
 import type { StoryPage, SpecialMark, PageReviewStatus } from '../types';
-import { generateMockPages } from '../data/mockData';
+import { generateMockPages, buildMockAnnotationMap } from '../data/mockData';
 import { generateId } from '../utils/idGenerator';
+
+const STORAGE_KEY = 'mangaflow_pages';
 
 interface PageState {
   pages: Record<string, StoryPage[]>;
   selectedPageId: string | null;
   statusFilter: PageReviewStatus | 'all';
-  initPagesForChapter: (chapterId: string, count?: number) => void;
-  getPagesForChapter: (chapterId: string) => StoryPage[];
-  getPageById: (chapterId: string, pageId: string) => StoryPage | undefined;
   setSelectedPage: (pageId: string | null) => void;
   setStatusFilter: (f: PageReviewStatus | 'all') => void;
+  initPagesForChapter: (chapterId: string, count?: number) => void;
   uploadPages: (chapterId: string, files: File[]) => Promise<void>;
   reorderPages: (chapterId: string, activeId: string, overId: string) => void;
   toggleSpecialMark: (chapterId: string, pageId: string, mark: SpecialMark) => void;
   setPageStatus: (chapterId: string, pageId: string, status: PageReviewStatus) => void;
   setPageStatusBatch: (chapterId: string, pageIds: string[], status: PageReviewStatus) => void;
-  getPageStats: (chapterId: string) => { pending: number; needs_revision: number; approved: number };
 }
 
+const loadFromStorage = (): Record<string, StoryPage[]> | null => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return null;
+};
+
+const saveToStorage = (pages: Record<string, StoryPage[]>) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(pages));
+  } catch {}
+};
+
 const buildInitialState = (): Record<string, StoryPage[]> => {
+  const stored = loadFromStorage();
+  if (stored && Object.keys(stored).length > 0) return stored;
   const pages = generateMockPages('chap_001', 20);
-  return { chap_001: pages };
+  const result = { chap_001: pages };
+  saveToStorage(result);
+  return result;
 };
 
 export const usePageStore = create<PageState>((set, get) => ({
@@ -30,55 +47,42 @@ export const usePageStore = create<PageState>((set, get) => ({
   selectedPageId: null,
   statusFilter: 'all',
 
-  initPagesForChapter: (chapterId, count = 0) => {
-    set((state) => {
-      if (state.pages[chapterId]) return state;
-      return {
-        pages: {
-          ...state.pages,
-          [chapterId]: generateMockPages(chapterId, count),
-        },
-      };
-    });
-  },
-
-  getPagesForChapter: (chapterId) => {
-    const list = get().pages[chapterId] || [];
-    const filtered = list.slice().sort((a, b) => a.sortOrder - b.sortOrder);
-    const filter = get().statusFilter;
-    if (filter === 'all') return filtered;
-    return filtered.map((p) => ({ ...p })).filter((p) => p.reviewStatus === filter);
-  },
-
-  getPageById: (chapterId, pageId) => get().pages[chapterId]?.find((p) => p.id === pageId),
-
   setSelectedPage: (pageId) => set({ selectedPageId: pageId }),
 
   setStatusFilter: (f) => set({ statusFilter: f }),
+
+  initPagesForChapter: (chapterId, count = 0) => {
+    set((state) => {
+      if (state.pages[chapterId]) return state;
+      const newPages = generateMockPages(chapterId, count);
+      const next = { ...state.pages, [chapterId]: newPages };
+      saveToStorage(next);
+      return { pages: next };
+    });
+  },
 
   uploadPages: async (chapterId, files) => {
     const urls: string[] = [];
     for (const f of files) {
       urls.push(URL.createObjectURL(f));
     }
-    const chapterPages = get().pages[chapterId] || [];
-    const startOrder = chapterPages.length;
-    const newPages: StoryPage[] = urls.map((url, idx) => ({
-      id: generateId('page'),
-      chapterId,
-      pageNumber: chapterPages.length + idx + 1,
-      imageUrl: url,
-      specialMarks: [],
-      reviewStatus: 'pending',
-      sortOrder: startOrder + idx,
-      createdAt: new Date().toISOString(),
-    }));
-    set((state) => ({
-      pages: {
-        ...state.pages,
-        [chapterId]: [...chapterPages, ...newPages],
-      },
-    }));
+    set((state) => {
+      const chapterPages = state.pages[chapterId] || [];
+      const startOrder = chapterPages.length;
+      const newPages: StoryPage[] = urls.map((url, idx) => ({
+        id: generateId('page'),
+        chapterId,
+        pageNumber: chapterPages.length + idx + 1,
+        imageUrl: url,
+        specialMarks: [],
+        reviewStatus: 'pending' as PageReviewStatus,
+        sortOrder: startOrder + idx,
+        createdAt: new Date().toISOString(),
+      }));
+      const next = { ...state.pages, [chapterId]: [...chapterPages, ...newPages] };
+      saveToStorage(next);
+      return { pages: next };
+    });
   },
 
   reorderPages: (chapterId, activeId, overId) => {
@@ -91,42 +95,38 @@ export const usePageStore = create<PageState>((set, get) => ({
       const [moved] = list.splice(oldIndex, 1);
       list.splice(newIndex, 0, moved);
       const reordered = list.map((p, idx) => ({ ...p, sortOrder: idx, pageNumber: idx + 1 }));
-      return {
-        pages: { ...state.pages, [chapterId]: reordered },
-      };
+      const next = { ...state.pages, [chapterId]: reordered };
+      saveToStorage(next);
+      return { pages: next };
     });
   },
 
   toggleSpecialMark: (chapterId, pageId, mark) => {
     set((state) => {
       const list = state.pages[chapterId] || [];
-      return {
-        pages: {
-          ...state.pages,
-          [chapterId]: list.map((p) =>
-            p.id !== pageId
-              ? p
-              : {
-                  ...p,
-                  specialMarks: p.specialMarks.includes(mark)
-                    ? p.specialMarks.filter((m) => m !== mark)
-                    : [...p.specialMarks, mark],
-                },
-          ),
-        },
-      };
+      const updated = list.map((p) =>
+        p.id !== pageId
+          ? p
+          : {
+              ...p,
+              specialMarks: p.specialMarks.includes(mark)
+                ? p.specialMarks.filter((m) => m !== mark)
+                : [...p.specialMarks, mark],
+            },
+      );
+      const next = { ...state.pages, [chapterId]: updated };
+      saveToStorage(next);
+      return { pages: next };
     });
   },
 
   setPageStatus: (chapterId, pageId, status) => {
     set((state) => {
       const list = state.pages[chapterId] || [];
-      return {
-        pages: {
-          ...state.pages,
-          [chapterId]: list.map((p) => (p.id !== pageId ? p : { ...p, reviewStatus: status })),
-        },
-      };
+      const updated = list.map((p) => (p.id !== pageId ? p : { ...p, reviewStatus: status }));
+      const next = { ...state.pages, [chapterId]: updated };
+      saveToStorage(next);
+      return { pages: next };
     });
   },
 
@@ -134,23 +134,28 @@ export const usePageStore = create<PageState>((set, get) => ({
     const idSet = new Set(pageIds);
     set((state) => {
       const list = state.pages[chapterId] || [];
-      return {
-        pages: {
-          ...state.pages,
-          [chapterId]: list.map((p) => (idSet.has(p.id) ? { ...p, reviewStatus: status } : p)),
-        },
-      };
+      const updated = list.map((p) => (idSet.has(p.id) ? { ...p, reviewStatus: status } : p));
+      const next = { ...state.pages, [chapterId]: updated };
+      saveToStorage(next);
+      return { pages: next };
     });
   },
-
-  getPageStats: (chapterId) => {
-    const list = get().pages[chapterId] || [];
-    return list.reduce(
-      (acc, p) => {
-        acc[p.reviewStatus]++;
-        return acc;
-      },
-      { pending: 0, needs_revision: 0, approved: 0 },
-    );
-  },
 }));
+
+export function selectFilteredPages(chapterId: string, statusFilter: PageReviewStatus | 'all'): StoryPage[] {
+  const state = usePageStore.getState();
+  const list = (state.pages[chapterId] || []).slice().sort((a, b) => a.sortOrder - b.sortOrder);
+  if (statusFilter === 'all') return list;
+  return list.filter((p) => p.reviewStatus === statusFilter);
+}
+
+export function selectAllPages(chapterId: string): StoryPage[] {
+  return (usePageStore.getState().pages[chapterId] || []).slice().sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+export function selectPageStats(chapterId: string): { pending: number; needs_revision: number; approved: number; total: number } {
+  const list = usePageStore.getState().pages[chapterId] || [];
+  const stats = { pending: 0, needs_revision: 0, approved: 0, total: list.length };
+  for (const p of list) stats[p.reviewStatus]++;
+  return stats;
+}
