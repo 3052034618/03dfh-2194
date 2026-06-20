@@ -136,6 +136,22 @@ const ReviewBoardPage: React.FC = () => {
     [allPages, statusFilter],
   );
 
+  // 筛选变化时，如果会议焦点页不在筛选范围内，自动调整焦点
+  useEffect(() => {
+    if (!meetingFocus || !meetingFocus.pageId) return;
+    const focusPage = allPages.find((p) => p.id === meetingFocus.pageId);
+    if (!focusPage) return;
+    const isInFilter = statusFilter === 'all' || focusPage.reviewStatus === statusFilter;
+    if (!isInFilter) {
+      const firstInFilter = filteredPages[0];
+      if (firstInFilter) {
+        updateMeetingFocus({ pageId: firstInFilter.id, selectedAnnotationId: null });
+        setSelected(firstInFilter.id);
+        setSelectedAnn(null);
+      }
+    }
+  }, [statusFilter, meetingFocus, allPages, filteredPages, updateMeetingFocus, setSelected, setSelectedAnn]);
+
   const stats = useMemo(() => {
     const s = { pending: 0, needs_revision: 0, approved: 0, total: rawPages.length };
     for (const p of rawPages) s[p.reviewStatus]++;

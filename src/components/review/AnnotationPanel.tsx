@@ -210,7 +210,7 @@ export const AnnotationPanel: React.FC<AnnotationPanelProps> = ({ page, meetingF
               return (
                 <div
                   key={a.id}
-                  onClick={() => setSelectedAnn(selectedAnnId === a.id ? null : a.id)}
+                  onClick={() => setSelectedAnn(selectedAnnId === a.id ? null : a.id, page?.id)}
                   className={cn(
                     'rounded-lg border p-3 transition-all animate-fade-in-up cursor-pointer',
                     a.id === focusAnnId

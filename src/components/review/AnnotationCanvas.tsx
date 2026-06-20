@@ -322,7 +322,7 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ pageId, imag
                 className="pointer-events-auto cursor-pointer"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setSelectedAnn(selectedAnnId === a.id ? null : a.id);
+                  setSelectedAnn(selectedAnnId === a.id ? null : a.id, pageId);
                 }}
               >
                 {renderRegion(
@@ -440,7 +440,7 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ pageId, imag
                 return (
                   <div
                     key={a.id}
-                    onClick={() => setSelectedAnn(selectedAnnId === a.id ? null : a.id)}
+                    onClick={() => setSelectedAnn(selectedAnnId === a.id ? null : a.id, pageId)}
                     className={cn(
                       'rounded-lg p-3 border transition-all cursor-pointer',
                       active

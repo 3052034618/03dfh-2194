@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { BookOpen, LayoutGrid, ListTodo, ClipboardList, Filter, Users, Video, VideoOff, Radio, FileText, X, Download } from 'lucide-react';
 import type { Work, Chapter, PageReviewStatus, UserRole, MeetingFocus, MeetingPageConclusion } from '../../types';
 import { STATUS_FLAGS } from '../../utils/tagConfig';
@@ -50,12 +50,40 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
   const addMeetingMinutes = useConclusionStore((s) => s.addMeetingMinutes);
   const annotations = useAnnotationStore((s) => s.annotations);
   const pages = usePageStore((s) => s.pages);
+  const updateMeetingFocus = useAnnotationStore((s) => s.updateMeetingFocus);
+  const startMeeting = useAnnotationStore((s) => s.startMeeting);
   const conclusions = useConclusionStore((s) => (chapter ? s.conclusions[chapter.id] : []) || []);
   const getMinutesForChapter = useConclusionStore((s) => s.getMinutesForChapter);
   const allMinutes = useMemo(() => (chapter ? getMinutesForChapter(chapter.id) : []), [chapter, getMinutesForChapter]);
+  const currentUser = useAuthStore((s) => s.currentUser);
   const [showMinutesModal, setShowMinutesModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [lastMinutes, setLastMinutes] = useState<any>(null);
+  const [selectedMinutes, setSelectedMinutes] = useState<any>(null);
+  const [assigneeFilter, setAssigneeFilter] = useState<string>('all');
+
+  const chapterPages = useMemo(() => (chapter ? pages[chapter.id] || [] : []), [chapter, pages]);
+
+  const handleBringToFocus = useCallback((pageId: string) => {
+    const page = chapterPages.find((p) => p.id === pageId);
+    if (!page || !chapter) return;
+    
+    if (meetingFocus) {
+      updateMeetingFocus({ pageId, selectedAnnotationId: null });
+    } else {
+      startMeeting({
+        chapterId: chapter.id,
+        pageId,
+        statusFilter: 'all',
+        roleFilter: 'all',
+        tagFilter: 'all',
+        selectedAnnotationId: null,
+        startedBy: currentUser.id,
+      });
+    }
+    setShowHistoryModal(false);
+    setSelectedMinutes(null);
+  }, [chapterPages, chapter, meetingFocus, updateMeetingFocus, startMeeting, currentUser.id]);
 
   const filters: { v: PageReviewStatus | 'all'; label: string; key: keyof typeof stats | 'all' }[] = [
     { v: 'all', label: '全部', key: 'all' },
@@ -386,23 +414,158 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
     {/* 历史纪要弹窗 */}
     {showHistoryModal && (
       <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-        <div className="bg-ink-900 border border-ink-700/60 rounded-2xl shadow-2xl w-[700px] max-h-[85vh] flex flex-col overflow-hidden">
+        <div className="bg-ink-900 border border-ink-700/60 rounded-2xl shadow-2xl w-[780px] max-h-[85vh] flex flex-col overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 border-b border-ink-700/60">
-            <div>
-              <div className="text-lg font-semibold text-ink-100">历史会议纪要</div>
-              <div className="text-xs text-ink-400">共 {allMinutes.length} 次会议</div>
+            <div className="flex items-center gap-3">
+              {selectedMinutes ? (
+                <button
+                  onClick={() => {
+                    setSelectedMinutes(null);
+                    setAssigneeFilter('all');
+                  }}
+                  className="p-1.5 -ml-1.5 rounded-lg hover:bg-ink-800/50 text-ink-400 hover:text-ink-200"
+                >
+                  ← 返回
+                </button>
+              ) : null}
+              <div>
+                <div className="text-lg font-semibold text-ink-100">
+                  {selectedMinutes
+                    ? `${new Date(selectedMinutes.startedAt).toLocaleDateString()} 会议纪要`
+                    : '历史会议纪要'}
+                </div>
+                <div className="text-xs text-ink-400">
+                  {selectedMinutes
+                    ? `共 ${selectedMinutes.totalPages} 页，${selectedMinutes.pagesWithConclusions} 页有结论`
+                    : `共 ${allMinutes.length} 次会议`}
+                </div>
+              </div>
             </div>
-            <button onClick={() => setShowHistoryModal(false)} className="p-1.5 rounded-lg hover:bg-ink-800/50 text-ink-400 hover:text-ink-200">
-              <X className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-2">
+              {selectedMinutes && (
+                <button
+                  onClick={() => downloadMinutesMarkdown(selectedMinutes)}
+                  className="btn-secondary flex items-center gap-1.5 text-xs py-1.5"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  导出
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  setShowHistoryModal(false);
+                  setSelectedMinutes(null);
+                  setAssigneeFilter('all');
+                }}
+                className="p-1.5 rounded-lg hover:bg-ink-800/50 text-ink-400 hover:text-ink-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
-          <div className="flex-1 overflow-auto p-6">
-            {allMinutes.length === 0 ? (
+
+          <div className="flex-1 overflow-auto">
+            {selectedMinutes ? (
+              <div className="p-6">
+                {/* 按负责人筛选 */}
+                <div className="mb-4 flex items-center gap-3 flex-wrap">
+                  <span className="text-xs text-ink-400">按负责人筛选：</span>
+                  <button
+                    onClick={() => setAssigneeFilter('all')}
+                    className={cn(
+                      'chip text-[10px] border transition-all',
+                      assigneeFilter === 'all'
+                        ? 'bg-accent-400/20 text-accent-400 border-accent-400/60'
+                        : 'bg-ink-800/50 text-ink-300 border-ink-700/60 hover:border-ink-600/70',
+                    )}
+                  >
+                    全部
+                  </button>
+                  {users.map((u) => {
+                    const count = selectedMinutes.pageConclusions.filter(
+                      (pc: any) => pc.assigneeUserId === u.id && pc.unresolvedCount > 0,
+                    ).length;
+                    if (count === 0) return null;
+                    return (
+                      <button
+                        key={u.id}
+                        onClick={() => setAssigneeFilter(u.id)}
+                        className={cn(
+                          'chip text-[10px] border transition-all',
+                          assigneeFilter === u.id
+                            ? 'bg-accent-400/20 text-accent-400 border-accent-400/60'
+                            : 'bg-ink-800/50 text-ink-300 border-ink-700/60 hover:border-ink-600/70',
+                        )}
+                      >
+                        {u.name}（{count}）
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* 页面结论列表 */}
+                <div className="space-y-3">
+                  {selectedMinutes.pageConclusions
+                    .filter((pc: any) => {
+                      if (assigneeFilter === 'all') return true;
+                      return pc.assigneeUserId === assigneeFilter;
+                    })
+                    .map((pc: any) => (
+                      <div
+                        key={pc.pageId}
+                        className="bg-ink-800/40 border border-ink-700/60 rounded-xl p-4 hover:bg-ink-800/60 transition-colors"
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <span className="chip bg-ink-700/60 text-ink-100 font-mono">
+                              第 {pc.pageNumber} 页
+                            </span>
+                            <span className="text-xs text-ink-400">
+                              {pc.unresolvedCount}/{pc.annotationCount} 待改
+                            </span>
+                            {pc.assigneeUserId && (
+                              <span className="text-xs text-accent-400">
+                                负责人：{users.find((u) => u.id === pc.assigneeUserId)?.name}
+                              </span>
+                            )}
+                            {pc.resolvedAt && (
+                              <span className="text-[10px] text-success">✓ 已完成</span>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => handleBringToFocus(pc.pageId)}
+                            className="text-xs text-accent-400 hover:text-accent-300 flex items-center gap-1"
+                          >
+                            <Radio className="w-3 h-3" />
+                            拉回会议讨论
+                          </button>
+                        </div>
+                        {pc.finalOpinion ? (
+                          <div className="text-sm text-ink-200 leading-relaxed whitespace-pre-wrap">
+                            {pc.finalOpinion}
+                          </div>
+                        ) : (
+                          <div className="text-sm text-ink-500 italic">未记录结论</div>
+                        )}
+                        {pc.resolvedAt && (
+                          <div className="mt-2 text-xs text-success">
+                            ✓ 已于 {new Date(pc.resolvedAt).toLocaleString()} 确认完成
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              </div>
+            ) : allMinutes.length === 0 ? (
               <div className="text-center py-12 text-ink-400">暂无历史会议纪要</div>
             ) : (
-              <div className="space-y-3">
+              <div className="p-6 space-y-3">
                 {allMinutes.slice().reverse().map((m: any) => (
-                  <div key={m.id} className="bg-ink-800/40 border border-ink-700/60 rounded-xl p-4 hover:bg-ink-800/60 transition-colors">
+                  <div
+                    key={m.id}
+                    className="bg-ink-800/40 border border-ink-700/60 rounded-xl p-4 hover:bg-ink-800/60 transition-colors cursor-pointer"
+                    onClick={() => setSelectedMinutes(m)}
+                  >
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <FileText className="w-4 h-4 text-accent-400" />
@@ -411,7 +574,10 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
                         </span>
                       </div>
                       <button
-                        onClick={() => downloadMinutesMarkdown(m)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          downloadMinutesMarkdown(m);
+                        }}
                         className="text-xs text-accent-400 hover:text-accent-300 flex items-center gap-1"
                       >
                         <Download className="w-3.5 h-3.5" />
@@ -420,8 +586,13 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
                     </div>
                     <div className="text-xs text-ink-400 space-y-1">
                       <div>主持人：{users.find((u) => u.id === m.startedBy)?.name || '未记录'}</div>
-                      <div>时间：{new Date(m.startedAt).toLocaleString()} - {new Date(m.endedAt).toLocaleString()}</div>
-                      <div>进度：{m.pagesWithConclusions}/{m.totalPages} 页有结论</div>
+                      <div>
+                        时间：{new Date(m.startedAt).toLocaleString()} -{' '}
+                        {new Date(m.endedAt).toLocaleString()}
+                      </div>
+                      <div>
+                        进度：{m.pagesWithConclusions}/{m.totalPages} 页有结论
+                      </div>
                     </div>
                   </div>
                 ))}

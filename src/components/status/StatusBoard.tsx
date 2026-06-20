@@ -21,6 +21,7 @@ import { cn } from '../../utils/idGenerator';
 import { STATUS_FLAGS } from '../../utils/tagConfig';
 import { Eye, AlertCircle, Check, GripVertical, MessageSquare } from 'lucide-react';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
+import { selectProcessStatus, PROCESS_STATUS_LABELS, PROCESS_STATUS_COLORS } from '../../store/useConclusionStore';
 
 interface StatusBoardProps {
   pages: StoryPage[];
@@ -43,7 +44,11 @@ const DraggableCard: React.FC<{
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: page.id });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1 };
   const rawAnns = useAnnotationStore((s) => s.annotations[page.id]);
-  const annCount = useMemo(() => (rawAnns ? rawAnns.length : 0), [rawAnns]);
+  const anns = useMemo(() => rawAnns || [], [rawAnns]);
+  const resolvedCount = useMemo(() => anns.filter((a) => a.resolved).length, [anns]);
+  const unresolvedCount = useMemo(() => anns.filter((a) => !a.resolved).length, [anns]);
+  const processStatus = useMemo(() => selectProcessStatus(page.id, anns), [page.id, anns]);
+  const processColor = PROCESS_STATUS_COLORS[processStatus];
   const flag = STATUS_FLAGS[page.reviewStatus];
 
   return (
@@ -92,25 +97,45 @@ const DraggableCard: React.FC<{
                     {m === 'cover' ? '封面' : m === 'recollection' ? '回忆' : m === 'color_page' ? '彩页' : m}
                   </span>
                 ))}
+              {anns.length > 0 && (
+                <span className={cn('text-[9px] px-1.5 py-0.5 rounded border', processColor.bg, processColor.text, processColor.border)}>
+                  {PROCESS_STATUS_LABELS[processStatus]}
+                </span>
+              )}
             </div>
           </div>
-          <div className="flex items-center justify-between mt-2">
-            <div className={cn('text-[10px] flex items-center gap-1', flag.text)}>
-              <span className="w-1.5 h-1.5 rounded-full" style={{ background: flag.flag }} />
-              {flag.label}
-            </div>
-            {annCount > 0 && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenAnnotation();
-                }}
-                className="text-[10px] chip border border-accent-400/40 bg-accent-400/10 text-accent-400 hover:bg-accent-400/20"
-              >
-                <MessageSquare className="w-2.5 h-2.5" />
-                {annCount}
-              </button>
+          <div className="mt-2 space-y-1.5">
+            {anns.length > 0 && (
+              <div className="flex items-center gap-2">
+                <div className="flex-1 h-1.5 rounded-full bg-ink-700/70 overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-success to-success/70 transition-all"
+                    style={{ width: `${(resolvedCount / anns.length) * 100}%` }}
+                  />
+                </div>
+                <span className="text-[9px] text-ink-400 font-mono">
+                  {resolvedCount}/{anns.length}
+                </span>
+              </div>
             )}
+            <div className="flex items-center justify-between">
+              <div className={cn('text-[10px] flex items-center gap-1', flag.text)}>
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: flag.flag }} />
+                {flag.label}
+              </div>
+              {anns.length > 0 && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenAnnotation();
+                  }}
+                  className="text-[10px] chip border border-accent-400/40 bg-accent-400/10 text-accent-400 hover:bg-accent-400/20"
+                >
+                  <MessageSquare className="w-2.5 h-2.5" />
+                  {unresolvedCount} 待改
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>

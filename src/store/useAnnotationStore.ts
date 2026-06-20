@@ -31,7 +31,7 @@ interface AnnotationState {
   updateAnnotation: (annotationId: string, updates: Partial<Annotation>) => void;
   deleteAnnotation: (annotationId: string) => void;
   resolveAnnotation: (annotationId: string, resolved: boolean) => void;
-  setSelectedAnnotation: (id: string | null) => void;
+  setSelectedAnnotation: (id: string | null, pageId?: string) => void;
   startMeeting: (focus: Omit<MeetingFocus, 'startedAt'>) => void;
   updateMeetingFocus: (updates: Partial<MeetingFocus>) => void;
   syncStatusFilterToMeeting: (statusFilter: MeetingFocus['statusFilter']) => void;
@@ -151,11 +151,15 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
     get().updateAnnotation(annotationId, { resolved });
   },
 
-  setSelectedAnnotation: (id) => {
+  setSelectedAnnotation: (id, pageId) => {
     set({ selectedAnnotationId: id });
     const meeting = get().meetingFocus;
     if (meeting) {
-      get().updateMeetingFocus({ selectedAnnotationId: id });
+      const updates: Partial<MeetingFocus> = { selectedAnnotationId: id };
+      if (pageId && meeting.pageId !== pageId) {
+        updates.pageId = pageId;
+      }
+      get().updateMeetingFocus(updates);
     }
   },
 
